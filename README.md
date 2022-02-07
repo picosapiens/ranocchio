@@ -1,0 +1,2 @@
+# ranocchio
+Arduino scopemeter
