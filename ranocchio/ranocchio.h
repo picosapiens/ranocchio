@@ -26,7 +26,7 @@
 #include <SPI.h>          // f.k. for Arduino-1.5.2
 #include "Adafruit_GFX.h"// Hardware-specific library
 #include <MCUFRIEND_kbv.h>
-#include "TouchScreen_kbv.h"         //hacked version
+#include <TouchScreen.h>
 #include <avr/io.h>
 #include <util/delay.h>
 #include "Girino.h"
@@ -44,10 +44,17 @@
 #define PLOTTERW 301
 #define PLOTTERH 180
 
+#define DIGITALH 17
+#define DIGITALSPACE 4
+
+#define MINPRESSURE 200
+#define MAXPRESSURE 1000
+
 const uint8_t vcoarsescale[9] = {10, 15, 20, 25, 30, 40, 50, 75, 100};
 extern uint8_t vcoarseindex;
 extern uint8_t vfineadjust;
 extern uint8_t vpower;
+extern long int vrange_uV;
 
 extern long int dataperiod_us;
 extern long int datafreq_Hzx10;
@@ -58,8 +65,8 @@ extern int YP;
 extern int XM;
 extern int YM;
 
-extern TouchScreen_kbv ts;
-extern TSPoint_kbv tp;
+extern TouchScreen ts;
+extern TSPoint tp;
 
 extern volatile uint32_t dtbuffered_ns;
 extern volatile uint32_t vresbuffered_uV;
@@ -133,20 +140,30 @@ extern int16_t cursorpos;
 
 extern volatile RanocchioSettings MySettings;
 
-void plotdata();
+void plotanalogdata(); //analog data
+void plotdigitaldata();
 int index_to_hpixels( int start, int i );
 int counts_to_vpixels( int midpt, int i);
 void plotVertScale();
 void plotHorizScale();
 void plotStatusBar();
 void plotInformation();
+void plotDigitalInformation();
 void datapixel(int index, int color);
 void storeplotcolumn();
 void restoreplotcolumn();
 void format3char( long int number, char* value, char* sign_units );
 
-//LANDSCAPE CALIBRATION     320 x 240
-void mappoints( TSPoint_kbv* tp );
+void mappoints( TSPoint* tp );
+
+void plotlogic();
+
+void mainMenu();
+void meterMode();
+void scopeMode();
+void logicMode();
+
+int seconddigit(int x);
 
 
 // These signal analysis functions are inspired by Creative Inventor's oscilloscope project

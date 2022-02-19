@@ -30,7 +30,7 @@
 
 #define DEBUG		0
 
-#define ADCBUFFERSIZE	3000
+#define ADCBUFFERSIZE	4000
 
 #define ADCPIN		15
 #define errorPin	51

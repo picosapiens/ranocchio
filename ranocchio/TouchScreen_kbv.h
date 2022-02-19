@@ -2,7 +2,7 @@
 // as oversampling to avoid 'bouncing'
 // (c) ladyada / adafruit
 // Code under MIT License
-
+/*
 #ifndef _TOUCHSCREEN_KBV_H_
 #define _TOUCHSCREEN_KBV_H_
 #include <stdint.h>
@@ -36,4 +36,4 @@ class TouchScreen_kbv {
 };
 
 #endif
-
+*/

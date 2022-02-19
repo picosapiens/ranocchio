@@ -1,6 +1,7 @@
 // Touch screen library with X Y and Z (pressure) readings as well
 // as oversampling to avoid 'bouncing'
 // adapted from (c) ladyada / adafruit
+/*
 
 #include "Arduino.h"
 
@@ -177,4 +178,4 @@ uint16_t TouchScreen_kbv::pressure(void) {
     int z2 = analogRead(_yp) ADC_ADJUST;
 
     return (1023 - (z2 - z1));
-}
+}*/

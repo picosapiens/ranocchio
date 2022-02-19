@@ -33,10 +33,11 @@ uint8_t datamax;
 uint16_t datadutycyclex1000;
 long int dataperiod_us;
 long int datafreq_Hzx10;
+long int vrange_uV = 5000000;
 
 int XP = 7, YP = A2, XM = A1, YM = 6;
-TouchScreen_kbv ts(XP, YP, XM, YM, 325); // last argument is ohms measured between D6 and RS
-TSPoint_kbv tp;                            //global point
+TouchScreen ts(XP, YP, XM, YM, 325); // last argument is ohms measured between D6 and RS
+TSPoint tp;                            //global point
 
 /*define ADCBUFFERSIZE 512
   volatile uint8_t ADCBuffer[ADCBUFFERSIZE] = {
@@ -161,9 +162,6 @@ void plotVertScale()
 
 void format3char( long int number, char* value, char* sign_units )
 {
-  Serial.print("Expressing ");
-  Serial.print(number);
-  Serial.print(" as whole part ");
   uint16_t fractpart = 0;
   while(number >= 1000)
   {
@@ -204,7 +202,7 @@ void plotStatusBar()
 {
   long int number;
   char value[4], sign_units[4];
-  tft.fillRect(0,0, SCREENWIDTH, PLOTTERY-1, COLOR_BLACK);
+  tft.fillRect(0,0, SCREENWIDTH, PLOTTERY, COLOR_BLACK);
   tft.setTextColor(COLOR_WHITE);
   tft.setTextSize(1);
 
@@ -327,7 +325,31 @@ void plotInformation()
     case CURSOR:
       tft.setTextColor(COLOR_RED);
       tft.setCursor(0,PLOTTERY+PLOTTERH+16);
-      sprintf(str, "%ldus, %ldmV", cursorpos*dtbuffered_ns/1000, ((long int)(ADCBuffer[ADCCounter+cursorpos])-128)*(long int)vresbuffered_uV/1000);
+      sprintf(str, "%ldus, %ldmV", cursorpos*dtbuffered_ns/1000, ((long int)(ADCBuffer[(ADCCounter+cursorpos)%ADCBUFFERSIZE])-128)*(long int)vresbuffered_uV/1000);
+      tft.print(str);
+      break;
+  }
+}
+
+void plotDigitalInformation()
+{
+  tft.fillRect(0, PLOTTERY+PLOTTERH+16, SCREENWIDTH, SCREENHEIGHT-PLOTTERY-PLOTTERH-16, COLOR_BLACK);
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_WHITE);
+  long int dat;
+
+  char str[45];
+  
+  switch(rightfunc)
+  {
+    case SCALE:
+    case SCROLL: // breakthrough
+      // This is where statistics like duty cycle and frequency can go
+      break;
+    case CURSOR:
+      tft.setTextColor(COLOR_RED);
+      tft.setCursor(0,PLOTTERY+PLOTTERH+16);
+      sprintf(str, "%ldus: 0x%02x", cursorpos*dtbuffered_ns/1000, ADCBuffer[(ADCCounter+cursorpos)%ADCBUFFERSIZE]);
       tft.print(str);
       break;
   }
@@ -350,7 +372,7 @@ void restoreplotcolumn()
   }*/
 }
 
-void plotdata()
+void plotanalogdata()
 {
   // Plot the grid
   //tft.fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
@@ -408,10 +430,21 @@ void datapixel(int index, int color)
   tft.drawPixel(x,y,color);
 }
 
-// From MCU_Friend example TouchScreen_Calibr_native
+// based on similar function from MCU_Friend example TouchScreen_Calibr_native
 void readResistiveTouch(void)
 {
     tp = ts.getPoint();
+    if( MINPRESSURE < tp.z && MAXPRESSURE>tp.z )
+  {
+    Serial.print("tp.x = ");
+    Serial.print(tp.x);
+    Serial.print(", tp.y = ");
+    Serial.print(tp.y);
+    Serial.print(", tp.z = ");
+    Serial.println(tp.z);
+  }
+
+    mappoints(&tp);
     pinMode(YP, OUTPUT);      //restore shared pins
     pinMode(XM, OUTPUT);
     //digitalWrite(YP, HIGH);  //because TFT control pins
@@ -419,16 +452,570 @@ void readResistiveTouch(void)
     //    Serial.println("tp.x=" + String(tp.x) + ", tp.y=" + String(tp.y) + ", tp.z =" + String(tp.z));
 }
 
-void mappoints( TSPoint_kbv* tp )
+void mappoints( TSPoint* tp )
 {
   //int x = tp->x;
-  tp->x = map(tp->x, 180, 930, 0, 320);
-  tp->y = map(tp->y, 180, 918, 0, 240);
+  /*tp->x = map(tp->x, 180, 930, 0, 320);
+  tp->y = map(tp->y, 180, 918, 0, 240);*/
+  
+  /*//PORTRAIT  CALIBRATION     240 x 320
+  x = map(p.x, LEFT=138, RT=909, 0, 240)
+  y = map(p.y, TOP=935, BOT=146, 0, 320)*/
+  
+  //LANDSCAPE CALIBRATION     320 x 240
+  int x = map(tp->x, 146, 935, 0, 320);
+  int y = map(tp->y, 138, 909, 0, 240);
+  tp->x = x;
+  tp->y = y;
 
   //PORTRAIT  CALIBRATION     240 x 320
   /*
   x = map(p.x, LEFT=181, RT=918, 0, 240)
   y = map(p.y, TOP=938, BOT=184, 0, 320)*/
+}
+
+void mainMenu()
+{
+  tft.setTextSize(3);
+
+  //TODO would be nice to come up with proper icons
+  tft.fillRect(0,0, SCREENWIDTH/2, SCREENHEIGHT/2, COLOR_RED);
+  tft.setCursor(30,SCREENHEIGHT/6);
+  tft.setTextColor(COLOR_WHITE);
+  tft.print("SCOPE");
+  tft.fillRect(SCREENWIDTH/2,0, SCREENWIDTH/2, SCREENHEIGHT/2, COLOR_GREEN);
+  tft.setCursor(SCREENWIDTH/2+30,SCREENHEIGHT/6);
+  tft.setTextColor(COLOR_BLACK);
+  tft.print("METER");
+  tft.fillRect(0,SCREENHEIGHT/2, SCREENWIDTH/2, SCREENHEIGHT/2, COLOR_BLUE);
+  tft.setCursor(30,SCREENHEIGHT/2+SCREENHEIGHT/6);
+  tft.setTextColor(COLOR_WHITE);
+  tft.print("LOGIC");
+  tft.fillRect(SCREENWIDTH/2,SCREENHEIGHT/2, SCREENWIDTH/2, SCREENHEIGHT/2, COLOR_BLACK);
+  /*tft.setCursor(SCREENWIDTH/2+20, SCREENEIGHT/2+SCREENHEIGHT/6);
+  tft.print("Future?");*/
+
+  tp.z = 0;
+  while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+    readResistiveTouch();
+
+  if( (SCREENWIDTH/2) > tp.x )                                   // ******LEFT HALF******
+  {
+    if( SCREENHEIGHT/2 > tp.y ) // TOP HALF
+    {
+      scopeMode();
+    } else { // BOTTOM HALF
+      logicMode();
+    }
+  } else {                                                             // ******RIGHT HALF******
+    if( SCREENHEIGHT/2 > tp.y ) // TOP HALF
+    {
+      meterMode();
+    } else { // BOTTOM HALF
+      // Nothing yet
+    }
+  }
+}
+
+void meterMode()
+{
+  bool returntomain = false;
+  int counter = 0;
+  int value;
+  int lastvalue=0;
+  long int vres2_uV = vrange_uV/2048; // half the actual resolution because I'm double sampling
+  char str[8];
+  bool signbit = false;
+
+  tp.z = 0;
+  
+  sbi(ADCSRA,ADPS2);
+  sbi(ADCSRA,ADPS1);
+  sbi(ADCSRA,ADPS0);
+  //cbi(ADMUX,ADLAR);
+  dtbuffered_ns = 9615;
+
+  tft.fillScreen(COLOR_BLACK);
+  tft.setTextSize(4);
+
+  while(!returntomain)
+  {
+    // Read pin
+    value = analogRead(ADCPIN); // This is the slow way of doing it, but we don't need to be fast here
+    pinMode(YP, OUTPUT);      //restore shared pins
+    pinMode(XM, OUTPUT);
+
+    // Update plot
+    tft.fillRect(counter,SCREENHEIGHT-64,3,64,COLOR_BLACK);
+    tft.drawLine(max(counter-1,0), SCREENHEIGHT-1-(lastvalue>>4), counter, SCREENHEIGHT-1-(value>>4), COLOR_GREENYELLOW);
+    lastvalue = value;
+
+    if(0==(counter%(SCREENWIDTH/2)))
+    {
+      // Update digits
+      tft.fillRect(0,40,SCREENWIDTH,90,COLOR_BLACK);
+      tft.setCursor(40,50);
+      value = (value+lastvalue-1024)*vres2_uV/1000;
+      signbit = (0<value);
+      value = abs(value);
+      sprintf(str,"%c%04d.%03d",(signbit?' ':'-'),value/1000,value%1000);
+      tft.println(str);
+    } else {
+      delay(10);
+    }
+
+    readResistiveTouch();
+    if(MINPRESSURE<tp.z && MAXPRESSURE>tp.z)
+      returntomain = true;
+    
+    counter = (counter+1)%SCREENWIDTH;
+  }
+}
+
+void scopeMode()
+{
+  bool returntomain = false;
+
+  plotVertScale();
+  plotHorizScale();
+  plotStatusBar();
+  plotanalogdata();
+  
+  while(!returntomain)
+  {
+    tp.z = 0;
+    while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+      readResistiveTouch();
+  
+    if( (PLOTTERX+PLOTTERW/3) > tp.x )                                                   // ******LEFT THIRD******
+    {
+      //Serial.println("Touch in the left third...");
+      if( PLOTTERY + PLOTTERH/2 > tp.y ) // Top half of plot region
+      {
+        leftfunc = (leftfunc+1)%2;
+        plotStatusBar();
+        delay(50);
+      } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half of plot region
+        switch(rightfunc)
+        {
+          case SCALE:
+            MySettings.usperdiv = max( MySettings.usperdiv - (MySettings.usperdiv>=1000?100:10)*(1+3*leftfunc), 10);
+            plotanalogdata();
+            plotHorizScale();
+            plotStatusBar();
+            break;
+          case SCROLL:
+            scrollindex = max( (scrollindex-500*(1+2*leftfunc)*MySettings.usperdiv/dtbuffered_ns) , 0);
+            plotanalogdata();
+            plotHorizScale();
+            plotStatusBar();
+            break;
+          case CURSOR:
+            restoreplotcolumn();
+            cursorpos = cursorpos - 1 - 4*leftfunc;
+            if(cursorpos<scrollindex);
+              cursorpos = scrollindex;
+            storeplotcolumn();
+            tft.drawFastVLine(PLOTTERX + index_to_hpixels( scrollindex, cursorpos ),PLOTTERY,PLOTTERH,COLOR_RED);
+            datapixel(cursorpos,COLOR_GREENYELLOW); // redraw the data pixel
+            plotInformation();
+            delay(25);
+            break;
+        }
+        //Serial.print("usperdiv = ");
+        //Serial.println(MySettings.usperdiv);
+      } else if ( PLOTTERY+PLOTTERH < tp.y) { // Very bottom of screen
+        //Serial.println("Running scope...");
+        memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
+        sei();
+        initPins();
+        initADC();
+        delay(10);
+        //ADCCounter=0;
+        startADC();
+        delay(10); // Takes a little while to get going?
+        stopIndex = ( ADCCounter + waitDuration ) % ADCBUFFERSIZE;
+        /*Serial.print("stopIndex: ");
+        Serial.print(stopIndex);
+        Serial.print("\n");*/
+        wait = true; freeze=false;
+        for(int i=0;i<10;i++)
+        {
+          delay(100);
+          if(freeze);
+            break;
+          if(!freeze && 9==i)
+          {
+            //tft.setCursor(160,220); // tft may not like me writing to it while ADC is in girino mode
+            //tft.println("hung up");
+            Serial.print("hung up");
+          }
+        }
+        //while(!freeze)
+        //  delay(100);
+        deinitADC();
+        scrollindex = 0;
+        plotanalogdata();
+        plotInformation();
+        //tft.begin(ID);
+        //tft.setRotation(1); // Landscape
+        }
+      } else if ( (PLOTTERX + PLOTTERW/3 < tp.x) && ( PLOTTERX + 2*PLOTTERW/3 > tp.x) ) { // ******MIDDLE THIRD******
+        //Serial.println("Touch in the middle third...");
+        if( PLOTTERY + PLOTTERH/2 > tp.y ) // Top half
+        {
+          if(COARSEADJUST == leftfunc)
+          {
+            vcoarseindex++;
+            if(9==vcoarseindex)
+            {
+              vcoarseindex = 0;
+              vpower++;
+            }
+          } else {
+            vfineadjust++;
+            if(vfineadjust > vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex])
+            {
+              vfineadjust = 0;
+              vcoarseindex++;
+              if(9==vcoarseindex)
+              {
+                vcoarseindex = 0;
+                vpower++;
+              }
+            }
+          }
+          MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
+          plotVertScale();
+          plotanalogdata();
+          plotStatusBar();
+          //Serial.print("uVperdiv = ");
+          //Serial.println(MySettings.uVperdiv);
+        } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
+          if(COARSEADJUST == leftfunc)
+          {
+            if(0<vcoarseindex)
+            {
+              vcoarseindex--;
+            } else {
+              vcoarseindex = 7;
+              vpower--;
+            }
+          } else {
+            if(0==vfineadjust)
+            {
+              if(0<vcoarseindex)
+              {
+                vcoarseindex--;
+              } else {
+                vcoarseindex = 7;
+                vpower--;
+              }
+              vfineadjust = vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex]+1;
+            }
+            vfineadjust--;
+          }
+          MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
+          plotVertScale();
+          plotanalogdata();
+          plotStatusBar();
+          //Serial.print("uVperdiv = ");
+          //Serial.println(MySettings.uVperdiv);
+        }
+        //Serial.println("Undefined touch in the middle third");
+      } else {                                                                             // ******RIGHT THIRD******
+        //Serial.println("Touch in the right third...");
+        if( PLOTTERY + PLOTTERH/2 > tp.y ) // Top half
+        {
+          if(CURSOR==rightfunc)
+          {
+            restoreplotcolumn();
+          }
+          rightfunc = (rightfunc+1)%3;
+          plotStatusBar();
+          if( CURSOR == rightfunc )
+          {
+            cursorpos = min( ADCBUFFERSIZE, scrollindex + 3*MySettings.usperdiv*1000/dtbuffered_ns );
+            storeplotcolumn();
+            tft.drawFastVLine(PLOTTERX + index_to_hpixels( scrollindex, cursorpos ),PLOTTERY,PLOTTERH,COLOR_RED);
+          }
+          plotInformation();
+          delay(50); // Not doing a data redraw, so pause a moment to prevent too many responses to touches
+        } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
+          switch(rightfunc)
+          {
+            case SCALE:
+              MySettings.usperdiv = min( MySettings.usperdiv + (MySettings.usperdiv)*(1+3*leftfunc), 1000000);
+              plotHorizScale();
+              plotanalogdata();
+              plotStatusBar();
+              break;
+            case SCROLL:
+              scrollindex = min( scrollindex+500*(1+2*leftfunc)*MySettings.usperdiv/dtbuffered_ns, ADCBUFFERSIZE );
+              plotHorizScale();
+              plotanalogdata();
+              plotStatusBar();
+              break;
+            case CURSOR:
+              restoreplotcolumn();
+              cursorpos = cursorpos + 1 + 4*leftfunc;
+              if(cursorpos>rightmostindex)
+                cursorpos = rightmostindex;
+              storeplotcolumn();
+              tft.drawFastVLine(PLOTTERX + index_to_hpixels( scrollindex, cursorpos ),PLOTTERY,PLOTTERH,COLOR_RED);
+              plotInformation();
+              delay(25);
+              break;
+          }
+        } else if ( PLOTTERY+PLOTTERH < tp.y) {
+          returntomain = true;
+        }
+      }
+  }
+}
+
+void logicMode()
+{
+  tft.fillScreen(COLOR_BLACK);
+  DDRA = B00000000; // Set port a to inputs
+  dtbuffered_ns = 893;
+  #warning sample rate is only a rough estimate
+  for(int i = 0; i<ADCBUFFERSIZE; i++)
+  {
+    //PORTA is pins 22-29
+    ADCBuffer[i] = PINA;
+  }
+  plotStatusBar();
+  plotdigitaldata();
+  plotHorizScale();
+
+  bool returntomain = false;
+  while(!returntomain)
+  {
+    tp.z = 0;
+    while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+      readResistiveTouch();
+  
+    if( (PLOTTERX+PLOTTERW/3) > tp.x )                                                   // ******LEFT THIRD******
+    {
+      if( PLOTTERY + PLOTTERH/2 > tp.y ) // Top half of plot region
+      {
+        leftfunc = (leftfunc+1)%2;
+        plotStatusBar();
+        delay(50);
+      } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half of plot region
+        switch(rightfunc)
+        {
+          case SCALE:
+            MySettings.usperdiv = max( MySettings.usperdiv - (MySettings.usperdiv>=1000?100:10)*(1+3*leftfunc), 10);
+            plotdigitaldata();
+            plotHorizScale();
+            plotStatusBar();
+            break;
+          case SCROLL:
+            scrollindex = max( (scrollindex-500*(1+2*leftfunc)*MySettings.usperdiv/dtbuffered_ns) , 0);
+            plotdigitaldata();
+            plotHorizScale();
+            plotStatusBar();
+            break;
+          case CURSOR:
+            restoreplotcolumn();
+            cursorpos = cursorpos - 1 - 4*leftfunc;
+            if(cursorpos<scrollindex);
+              cursorpos = scrollindex;
+            storeplotcolumn();
+            tft.drawFastVLine(PLOTTERX + index_to_hpixels( scrollindex, cursorpos ),PLOTTERY,PLOTTERH,COLOR_RED);
+            datapixel(cursorpos,COLOR_GREENYELLOW); // redraw the data pixel
+            plotDigitalInformation();
+            delay(25);
+            break;
+        }
+        //Serial.print("usperdiv = ");
+        //Serial.println(MySettings.usperdiv);
+      } else if ( PLOTTERY+PLOTTERH < tp.y) { // Very bottom of screen
+        //Serial.println("Running scope...");
+        memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
+        sei();
+        initPins();
+        initADC();
+        delay(10);
+        //ADCCounter=0;
+        startADC();
+        delay(10); // Takes a little while to get going?
+        stopIndex = ( ADCCounter + waitDuration ) % ADCBUFFERSIZE;
+        /*Serial.print("stopIndex: ");
+        Serial.print(stopIndex);
+        Serial.print("\n");*/
+        wait = true; freeze=false;
+        for(int i=0;i<10;i++)
+        {
+          delay(100);
+          if(freeze);
+            break;
+          if(!freeze && 9==i)
+          {
+            //tft.setCursor(160,220); // tft may not like me writing to it while ADC is in girino mode
+            //tft.println("hung up");
+            Serial.print("hung up");
+          }
+        }
+        //while(!freeze)
+        //  delay(100);
+        deinitADC();
+        scrollindex = 0;
+        plotdigitaldata();
+        plotDigitalInformation();
+        //tft.begin(ID);
+        //tft.setRotation(1); // Landscape
+        }
+      } else if ( (PLOTTERX + PLOTTERW/3 < tp.x) && ( PLOTTERX + 2*PLOTTERW/3 > tp.x) ) { // ******MIDDLE THIRD******
+        //Serial.println("Touch in the middle third...");
+        if( PLOTTERY + PLOTTERH/2 > tp.y ) // Top half
+        {
+          if(COARSEADJUST == leftfunc)
+          {
+            vcoarseindex++;
+            if(9==vcoarseindex)
+            {
+              vcoarseindex = 0;
+              vpower++;
+            }
+          } else {
+            vfineadjust++;
+            if(vfineadjust > vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex])
+            {
+              vfineadjust = 0;
+              vcoarseindex++;
+              if(9==vcoarseindex)
+              {
+                vcoarseindex = 0;
+                vpower++;
+              }
+            }
+          }
+          MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
+          plotdigitaldata();
+          plotStatusBar();
+          //Serial.print("uVperdiv = ");
+          //Serial.println(MySettings.uVperdiv);
+        } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
+          if(COARSEADJUST == leftfunc)
+          {
+            if(0<vcoarseindex)
+            {
+              vcoarseindex--;
+            } else {
+              vcoarseindex = 7;
+              vpower--;
+            }
+          } else {
+            if(0==vfineadjust)
+            {
+              if(0<vcoarseindex)
+              {
+                vcoarseindex--;
+              } else {
+                vcoarseindex = 7;
+                vpower--;
+              }
+              vfineadjust = vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex]+1;
+            }
+            vfineadjust--;
+          }
+          MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
+          plotdigitaldata();
+          plotStatusBar();
+          //Serial.print("uVperdiv = ");
+          //Serial.println(MySettings.uVperdiv);
+        }
+        //Serial.println("Undefined touch in the middle third");
+      } else {                                                                             // ******RIGHT THIRD******
+        //Serial.println("Touch in the right third...");
+        if( PLOTTERY + PLOTTERH/2 > tp.y ) // Top half
+        {
+          if(CURSOR==rightfunc)
+          {
+            restoreplotcolumn();
+          }
+          rightfunc = (rightfunc+1)%3;
+          plotStatusBar();
+          if( CURSOR == rightfunc )
+          {
+            cursorpos = min( ADCBUFFERSIZE, scrollindex + 3*MySettings.usperdiv*1000/dtbuffered_ns );
+            storeplotcolumn();
+            tft.drawFastVLine(PLOTTERX + index_to_hpixels( scrollindex, cursorpos ),PLOTTERY,PLOTTERH,COLOR_RED);
+          }
+          plotDigitalInformation();
+          delay(50); // Not doing a data redraw, so pause a moment to prevent too many responses to touches
+        } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
+          switch(rightfunc)
+          {
+            case SCALE:
+              MySettings.usperdiv = min( MySettings.usperdiv + (MySettings.usperdiv)*(1+3*leftfunc), 1000000);
+              plotHorizScale();
+              plotdigitaldata();
+              plotStatusBar();
+              break;
+            case SCROLL:
+              scrollindex = min( scrollindex+500*(1+2*leftfunc)*MySettings.usperdiv/dtbuffered_ns, ADCBUFFERSIZE );
+              plotHorizScale();
+              plotdigitaldata();
+              plotStatusBar();
+              break;
+            case CURSOR:
+              restoreplotcolumn();
+              cursorpos = cursorpos + 1 + 4*leftfunc;
+              if(cursorpos>rightmostindex)
+                cursorpos = rightmostindex;
+              storeplotcolumn();
+              tft.drawFastVLine(PLOTTERX + index_to_hpixels( scrollindex, cursorpos ),PLOTTERY,PLOTTERH,COLOR_RED);
+              plotDigitalInformation();
+              delay(25);
+              break;
+          }
+        } else if ( PLOTTERY+PLOTTERH < tp.y) {
+          returntomain = true;
+        }
+      }
+  }
+}
+
+void plotdigitaldata()
+{
+  tft.fillRect(PLOTTERX, PLOTTERY, PLOTTERW, PLOTTERH, COLOR_BLACK);
+
+  // Plot the grid
+  //tft.fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
+  tft.fillRect(PLOTTERX, PLOTTERY, PLOTTERW, PLOTTERH, COLOR_BLACK);
+  for( int i = 0; i<=PLOTTERW; i=i+XDIVPIXELS) tft.drawFastVLine(i+PLOTTERX,PLOTTERY,PLOTTERH,COLOR_DARKERGREY);
+  tft.drawFastHLine(PLOTTERX,PLOTTERY,PLOTTERW,COLOR_DARKERGREY);
+  tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH,PLOTTERW,COLOR_DARKERGREY);
+  
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_WHITE);
+  for(int j=0;j<8;j++)
+  {
+    tft.setCursor(PLOTTERX/2, PLOTTERY + 3 + j*(DIGITALSPACE + DIGITALH));
+    tft.print(j);
+  }
+  int x0 = PLOTTERX;
+  int x1 = PLOTTERX;
+  int y0[8] = {0,0,0,0,0,0,0,0};
+  int y1[8] = {PLOTTERY+0+(1-bitRead(ADCBuffer[scrollindex],0))*DIGITALH, PLOTTERY+1*DIGITALSPACE+(2-bitRead(ADCBuffer[scrollindex],1))*DIGITALH, PLOTTERY+2*DIGITALSPACE+(3-bitRead(ADCBuffer[scrollindex],2))*DIGITALH, PLOTTERY+3*DIGITALSPACE+(4-bitRead(ADCBuffer[scrollindex],3))*DIGITALH, PLOTTERY+4*DIGITALSPACE+(5-bitRead(ADCBuffer[scrollindex],4))*DIGITALH, PLOTTERY+5*DIGITALSPACE+(6-bitRead(ADCBuffer[scrollindex],5))*DIGITALH, PLOTTERY+6*DIGITALSPACE+(7-bitRead(ADCBuffer[scrollindex],6))*DIGITALH, PLOTTERY+7*DIGITALSPACE+(8-bitRead(ADCBuffer[scrollindex],7))*DIGITALH};
+  for(int i=scrollindex+1;i<ADCBUFFERSIZE;i++)
+  {
+    x0 = x1;
+    x1 = PLOTTERX+index_to_hpixels( scrollindex, i );
+    if(x1>SCREENWIDTH)
+      break;
+    memcpy(y0,y1,8*sizeof(int));
+    for(int j=0;j<8;j++)
+    {
+      y1[j] = PLOTTERY+DIGITALSPACE*j+(j+1-bitRead(ADCBuffer[i],j))*DIGITALH;
+      tft.drawLine(x0,y0[j],x1,y1[j],COLOR_GREENYELLOW);
+    }
+    rightmostindex = i;
+  }
 }
 
 int sum3(int i) // to filter out noise
@@ -448,7 +1035,7 @@ void analyzeData() // Analyze the portion of the data displayed on the screen
   uint32_t foundpcrossings=0;
   uint32_t totalhightime=0;
   bool searchpositive=true;
-  for(int i = scrollindex; i<=rightmostindex; i++)
+  for(int i = scrollindex+1; i<=rightmostindex-1; i++)
   {
     if( ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE] > datamax )
       datamax = ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE];
@@ -458,7 +1045,7 @@ void analyzeData() // Analyze the portion of the data displayed on the screen
   swingline = (datamax+datamin)/2;
 
   // Find positive crossings of the mean signal
-  for(int i=scrollindex+1; i<rightmostindex; i++)
+  for(int i=scrollindex+1; i<rightmostindex-1; i++)
   {
     if(searchpositive)
     {
@@ -486,8 +1073,5 @@ void analyzeData() // Analyze the portion of the data displayed on the screen
   // Calculate period and frequency
   dataperiod_us = (lastpcrossingx10-firstpcrossingx10)*dtbuffered_ns/10000/(foundpcrossings-1);
   datafreq_Hzx10 = (long int)10000000/dataperiod_us;
-  datadutycyclex1000 = 10000*(totalhightime-(searchpositive?lastncrossing*10-lastpcrossingx10:0))/(lastpcrossingx10-firstpcrossingx10);
-  #warning does not consider partial cycles
-  
-  
+  datadutycyclex1000 = 1000*(10*totalhightime-(searchpositive?lastncrossing*10-lastpcrossingx10:0))/(lastpcrossingx10-firstpcrossingx10);
 }
