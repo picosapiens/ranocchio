@@ -24,6 +24,8 @@
 #include "ranocchio.h"
 //include "TouchScreen_kbv.h"
 #include "TouchScreen.h"
+#include "touchkbd.h"
+//include <SoftwareSerial.h>
 
 //bool state;
 
@@ -43,13 +45,17 @@ volatile  boolean freeze;
           uint8_t threshold;
 
              char commandBuffer[COMBUFFERSIZE+1];
+
+             bool SDready;
             
 
 MCUFRIEND_kbv tft;
-uint16_t pixels[PLOTTERH];
+uint16_t pixels[SCREENWIDTH];
 int16_t pixelsx;
 
 uint16_t ID;
+
+uint8_t triggertype = 0;
 
 volatile uint32_t dtbuffered_ns = 6535;
 volatile uint32_t vresbuffered_uV = 19607;
@@ -60,6 +66,33 @@ int16_t rightmostindex=0;
 uint8_t rightfunc;
 
 uint8_t leftfunc;
+
+File root;
+
+/*
+void printDirectory(File dir, int numTabs) {
+  while (true) {
+
+    File entry =  dir.openNextFile();
+    if (! entry) {
+      // no more files
+      break;
+    }
+    for (uint8_t i = 0; i < numTabs; i++) {
+      Serial.print('\t');
+    }
+    Serial.print(entry.name());
+    if (entry.isDirectory()) {
+      Serial.println("/");
+      printDirectory(entry, numTabs + 1);
+    } else {
+      // files have sizes, directories do not
+      Serial.print("\t\t");
+      Serial.println(entry.size(), DEC);
+    }
+    entry.close();
+  }
+}*/
 
 void setup() {
   // put your setup code here, to run once:
@@ -101,16 +134,32 @@ void setup() {
   vcoarseindex = 3;
   vfineadjust = 0;
   vpower = 5;
+  triggerlevel = 160;
   MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
   MySettings.usperdiv = 2000;
   MySettings.ADCprescaler = 8;
   #warning ADCprescaler=4 doesn't work -- may need to do something to get it to stop at 6 bits?
   rightfunc = SCALE;
   leftfunc = COARSEADJUST;
+
+  // Mega uses different pins that will need to be sorted out
+  /*
+  //pinMode(10,OUTPUT);
+  //digitalWrite(10, LOW); // Low enable
+  pinMode(A3,OUTPUT);
+  digitalWrite(A3,HIGH); // LCD Disable
+  //SoftwareSerial ss(8,9)/ % Rx, Tx
+  SDready = SD.begin(10); // Mega uses pins 50-53, so this fails
+  if(!SDready)
+    Serial.println("SD card failed to begin");
+  root = SD.open("/");
+  printDirectory(root, 0);
+  */
 }
 
 void loop() {
-  
+  //char s[10] = "";
+  //touchkeyinput(s, 8, "");
   mainMenu();
 
 }

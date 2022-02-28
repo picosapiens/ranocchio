@@ -30,6 +30,7 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include "Girino.h"
+#include <SD.h>
 //define TouchScreen TouchScreen_kbv
 //define TSPoint TSPoint_kbv;
 
@@ -80,7 +81,7 @@ extern volatile uint32_t vresbuffered_uV;
 #define LCD_RESET A4 // Can alternately just connect to Arduino's reset pin
 
 extern MCUFRIEND_kbv tft;
-extern uint16_t pixels[PLOTTERH];
+extern uint16_t pixels[SCREENWIDTH];
 extern int16_t pixelsx;
 
 //extern int ADCCounter;
@@ -122,6 +123,23 @@ extern uint8_t rightfunc;
 #define SCALE 0
 #define SCROLL 1
 #define CURSOR 2
+#define TRIGGER 3
+#define NUMRFUNCS 4
+
+extern uint8_t triggerstatus;
+
+extern uint8_t triggertype;
+#define RISINGEDGE 0
+#define FALLINGEDGE 1
+#define NOTRIGGER 2
+
+extern uint16_t tripletrig;
+extern uint16_t triplesum;
+
+extern uint8_t triggermode;
+extern uint8_t triggerlevel;
+#define NORMAL 0
+#define SINGLE 1
 
 extern uint8_t leftfunc;
 #define COARSEADJUST 1
@@ -151,7 +169,9 @@ void plotInformation();
 void plotDigitalInformation();
 void datapixel(int index, int color);
 void storeplotcolumn();
+void storeplotrow();
 void restoreplotcolumn();
+void restoreplotrow();
 void format3char( long int number, char* value, char* sign_units );
 
 void mappoints( TSPoint* tp );
@@ -163,7 +183,13 @@ void meterMode();
 void scopeMode();
 void logicMode();
 
+void scopeSettings();
+
 int seconddigit(int x);
+
+void readResistiveTouch(void);
+
+void exportData();
 
 
 // These signal analysis functions are inspired by Creative Inventor's oscilloscope project

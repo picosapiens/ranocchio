@@ -28,6 +28,13 @@ uint8_t vcoarseindex;
 uint8_t vfineadjust;
 uint8_t vpower;
 
+uint8_t triggermode=0;
+uint8_t triggerlevel;
+uint8_t triggerstatus;
+uint16_t tripletrig;
+uint16_t triplesum;
+
+
 uint8_t datamin;
 uint8_t datamax;
 uint16_t datadutycyclex1000;
@@ -131,7 +138,11 @@ void plotVertScale()
         prefix = '?'; // failure to prefix
     }
   }
-  tft.fillRect(0,PLOTTERY, SCREENWIDTH-PLOTTERW, PLOTTERH, COLOR_BLACK);
+  tft.fillRect(0,PLOTTERY, SCREENWIDTH-PLOTTERW, PLOTTERH+1, COLOR_BLACK);
+  if(NOTRIGGER != triggermode)
+  {
+    tft.drawFastHLine(0,PLOTTERY + PLOTTERH - counts_to_vpixels(0,triggerlevel),PLOTTERX,COLOR_BLUE);
+  }
   tft.setTextSize(1);
   tft.setTextColor(COLOR_WHITE);
   
@@ -217,7 +228,7 @@ void plotStatusBar()
       break;
   }
   
-  tft.setCursor(100, 0);
+  tft.setCursor(75, 0);
   number = MySettings.usperdiv;
   strcpy(sign_units,"+us");
   format3char(number,value,sign_units);
@@ -225,13 +236,44 @@ void plotStatusBar()
   tft.print(sign_units[1]); tft.print(sign_units[2]);
   tft.print("/div");
 
-  tft.setCursor(180, 0);
+  tft.setCursor(150, 0);
   number = MySettings.uVperdiv;
   strcpy(sign_units,"+uV");
   format3char(number,value,sign_units);
   tft.print(value);
   tft.print(sign_units[1]); tft.print(sign_units[2]);
   tft.print("/div");
+
+  switch(triggertype)
+  {
+    case RISINGEDGE:
+      tft.drawFastHLine(226,8,7,COLOR_WHITE);
+      tft.drawFastVLine(232,0,8,COLOR_WHITE);
+      tft.drawFastHLine(233,0,7,COLOR_WHITE);
+      break;
+    case FALLINGEDGE:
+      tft.drawFastHLine(226,0,7,COLOR_WHITE);
+      tft.drawFastVLine(232,0,8,COLOR_WHITE);
+      tft.drawFastHLine(233,8,7,COLOR_WHITE);
+      break;
+    case NOTRIGGER:
+      tft.setCursor(226,0);
+      tft.print("TR");
+      tft.drawLine(227,0,236,5,COLOR_RED);
+      tft.drawLine(227,1,236,6,COLOR_RED);
+      break;
+  }
+  tft.setCursor(237,0);
+  switch(triggermode)
+  {
+    case NORMAL:
+      tft.print("Con");
+      break;
+    case SINGLE:
+      tft.print("Sin");
+      break;
+  }
+  
 
   tft.setCursor(270,0);
   switch(rightfunc)
@@ -244,6 +286,9 @@ void plotStatusBar()
       break;
     case CURSOR:
       tft.print("[CURSOR]");
+      break;
+    case TRIGGER:
+      tft.print("[TRIGGR]");
       break;
     default:
       tft.print("[???]");
@@ -361,6 +406,12 @@ void storeplotcolumn()
   tft.readGRAM( pixelsx, PLOTTERY, pixels, 1, PLOTTERH);
 }
 
+void storeplotrow()
+{
+  pixelsx = PLOTTERY + PLOTTERH - counts_to_vpixels( 0, triggerlevel); // y coordinate
+  tft.readGRAM( PLOTTERX, pixelsx, pixels, PLOTTERW, 1);
+}
+
 void restoreplotcolumn()
 {
   tft.setAddrWindow( pixelsx, PLOTTERY, pixelsx, PLOTTERY+PLOTTERH-1 );
@@ -370,6 +421,13 @@ void restoreplotcolumn()
   {
     tft.drawPixel(cursorpos, PLOTTERY+i, pixels[i]);
   }*/
+}
+
+void restoreplotrow()
+{
+  tft.setAddrWindow( PLOTTERX, pixelsx, PLOTTERX+PLOTTERW, pixelsx);
+  tft.pushColors(pixels,PLOTTERW, true);
+  tft.setAddrWindow(PLOTTERX, 0, tft.width() - 1, tft.height() - 1);
 }
 
 void plotanalogdata()
@@ -422,6 +480,17 @@ int counts_to_vpixels( int midpt, int i)
   return map(((long int)i-128)*vresbuffered_uV,midpt-((int32_t)PLOTTERH / YDIVPIXELS)*MySettings.uVperdiv/2,  midpt+((int32_t)PLOTTERH / YDIVPIXELS)*MySettings.uVperdiv/2, 0, PLOTTERH);
 }
 
+void scopeSettings()
+{
+  tft.fillScreen(COLOR_BLACK);
+  tft.setTextColor(COLOR_WHITE);
+  int pageno = 0;
+
+  tft.setCursor(5,5); tft.print("Scope Settings");
+  tft.setCursor(5+SCREENHEIGHT/4,5); tft.print("Trigger: None");
+  tft.setCursor(5+SCREENHEIGHT/2,5); tft.print("Save data to SD");
+}
+
 void datapixel(int index, int color)
 {
   // Redraw the pixel as a yellow green dot
@@ -434,7 +503,7 @@ void datapixel(int index, int color)
 void readResistiveTouch(void)
 {
     tp = ts.getPoint();
-    if( MINPRESSURE < tp.z && MAXPRESSURE>tp.z )
+    /*if( MINPRESSURE < tp.z && MAXPRESSURE>tp.z )
   {
     Serial.print("tp.x = ");
     Serial.print(tp.x);
@@ -442,7 +511,7 @@ void readResistiveTouch(void)
     Serial.print(tp.y);
     Serial.print(", tp.z = ");
     Serial.println(tp.z);
-  }
+  }*/
 
     mappoints(&tp);
     pinMode(YP, OUTPUT);      //restore shared pins
@@ -472,6 +541,16 @@ void mappoints( TSPoint* tp )
   /*
   x = map(p.x, LEFT=181, RT=918, 0, 240)
   y = map(p.y, TOP=938, BOT=184, 0, 320)*/
+
+  if( MINPRESSURE < tp->z && MAXPRESSURE>tp->z )
+  {
+    Serial.print("tp.x = ");
+    Serial.print(tp->x);
+    Serial.print(", tp.y = ");
+    Serial.print(tp->y);
+    Serial.print(", tp.z = ");
+    Serial.println(tp->z);
+  }
 }
 
 void mainMenu()
@@ -621,25 +700,41 @@ void scopeMode()
             plotInformation();
             delay(25);
             break;
+          case TRIGGER:
+            triggertype = (triggertype+1)%3;
+            plotStatusBar();
+            delay(100);
+            break;
         }
         //Serial.print("usperdiv = ");
         //Serial.println(MySettings.usperdiv);
       } else if ( PLOTTERY+PLOTTERH < tp.y) { // Very bottom of screen
         //Serial.println("Running scope...");
         memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
+        triplesum = 0;
+        tripletrig = 3*triggerlevel;
         sei();
         initPins();
         initADC();
         delay(10);
         //ADCCounter=0;
         startADC();
-        delay(10); // Takes a little while to get going?
-        stopIndex = ( ADCCounter + waitDuration ) % ADCBUFFERSIZE;
+        //delay(10); // Takes a little while to get going?
+        if(NOTRIGGER == triggertype)
+        {
+          triggerstatus = 2; //immegiately mark as triggered
+          stopIndex = ( ADCCounter + waitDuration ) % ADCBUFFERSIZE;
+        } else {
+          triggerstatus = 0; // ready
+          stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
+        }
+        wait = true; freeze=false;
+        
         /*Serial.print("stopIndex: ");
         Serial.print(stopIndex);
         Serial.print("\n");*/
-        wait = true; freeze=false;
-        for(int i=0;i<10;i++)
+        
+        /*for(int i=0;i<10;i++)
         {
           delay(100);
           if(freeze);
@@ -650,9 +745,11 @@ void scopeMode()
             //tft.println("hung up");
             Serial.print("hung up");
           }
-        }
-        //while(!freeze)
-        //  delay(100);
+        }*/
+        while(!freeze)
+          delay(100);
+        #warning Need to implement stop button so we can't get stuck waiting forever for trigger
+        #warmomg Should write an indicator to the screen to show measurement is running
         deinitADC();
         scrollindex = 0;
         plotanalogdata();
@@ -664,63 +761,87 @@ void scopeMode()
         //Serial.println("Touch in the middle third...");
         if( PLOTTERY + PLOTTERH/2 > tp.y ) // Top half
         {
-          if(COARSEADJUST == leftfunc)
+          switch(rightfunc)
           {
-            vcoarseindex++;
-            if(9==vcoarseindex)
-            {
-              vcoarseindex = 0;
-              vpower++;
-            }
-          } else {
-            vfineadjust++;
-            if(vfineadjust > vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex])
-            {
-              vfineadjust = 0;
-              vcoarseindex++;
-              if(9==vcoarseindex)
+            case SCALE:
+              if(COARSEADJUST == leftfunc)
               {
-                vcoarseindex = 0;
-                vpower++;
-              }
-            }
-          }
-          MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
-          plotVertScale();
-          plotanalogdata();
-          plotStatusBar();
-          //Serial.print("uVperdiv = ");
-          //Serial.println(MySettings.uVperdiv);
-        } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
-          if(COARSEADJUST == leftfunc)
-          {
-            if(0<vcoarseindex)
-            {
-              vcoarseindex--;
-            } else {
-              vcoarseindex = 7;
-              vpower--;
-            }
-          } else {
-            if(0==vfineadjust)
-            {
-              if(0<vcoarseindex)
-              {
-                vcoarseindex--;
+                vcoarseindex++;
+                if(9==vcoarseindex)
+                {
+                  vcoarseindex = 0;
+                  vpower++;
+                }
               } else {
-                vcoarseindex = 7;
-                vpower--;
+                vfineadjust++;
+                if(vfineadjust > vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex])
+                {
+                  vfineadjust = 0;
+                  vcoarseindex++;
+                  if(9==vcoarseindex)
+                  {
+                    vcoarseindex = 0;
+                    vpower++;
+                  }
+                }
               }
-              vfineadjust = vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex]+1;
-            }
-            vfineadjust--;
+              MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
+              plotanalogdata();
+              plotStatusBar();
+              plotVertScale();
+              //Serial.print("uVperdiv = ");
+              //Serial.println(MySettings.uVperdiv);
+              break;
+            case TRIGGER:
+              restoreplotrow();
+              if(255>triggerlevel)
+                triggerlevel++;
+              storeplotrow();
+              tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
+              break;
           }
-          MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
-          plotVertScale();
-          plotanalogdata();
-          plotStatusBar();
-          //Serial.print("uVperdiv = ");
-          //Serial.println(MySettings.uVperdiv);
+        } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
+          switch(rightfunc)
+          {
+            case SCALE:
+              if(COARSEADJUST == leftfunc)
+              {
+                if(0<vcoarseindex)
+                {
+                  vcoarseindex--;
+                } else {
+                  vcoarseindex = 7;
+                  vpower--;
+                }
+              } else {
+                if(0==vfineadjust)
+                {
+                  if(0<vcoarseindex)
+                  {
+                    vcoarseindex--;
+                  } else {
+                    vcoarseindex = 7;
+                    vpower--;
+                  }
+                  vfineadjust = vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex]+1;
+                }
+                vfineadjust--;
+              }
+              MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
+              plotanalogdata();
+              plotStatusBar();
+              plotVertScale();
+              break;
+              //Serial.print("uVperdiv = ");
+              //Serial.println(MySettings.uVperdiv);
+              break;
+            case TRIGGER:
+              restoreplotrow();
+              if(0<triggerlevel)
+                triggerlevel--;
+              storeplotrow();
+              tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
+          }
         }
         //Serial.println("Undefined touch in the middle third");
       } else {                                                                             // ******RIGHT THIRD******
@@ -730,14 +851,20 @@ void scopeMode()
           if(CURSOR==rightfunc)
           {
             restoreplotcolumn();
+          } else if (TRIGGER == rightfunc) {
+            restoreplotrow();
+            plotVertScale();
           }
-          rightfunc = (rightfunc+1)%3;
+          rightfunc = (rightfunc+1)%NUMRFUNCS;
           plotStatusBar();
           if( CURSOR == rightfunc )
           {
             cursorpos = min( ADCBUFFERSIZE, scrollindex + 3*MySettings.usperdiv*1000/dtbuffered_ns );
             storeplotcolumn();
             tft.drawFastVLine(PLOTTERX + index_to_hpixels( scrollindex, cursorpos ),PLOTTERY,PLOTTERH,COLOR_RED);
+          } else if ( TRIGGER == rightfunc ) {
+            storeplotrow();
+            tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
           }
           plotInformation();
           delay(50); // Not doing a data redraw, so pause a moment to prevent too many responses to touches
@@ -766,6 +893,11 @@ void scopeMode()
               plotInformation();
               delay(25);
               break;
+            case TRIGGER:
+              triggermode = (triggermode+1)%2;
+              plotStatusBar();
+              delay(100);
+              break;
           }
         } else if ( PLOTTERY+PLOTTERH < tp.y) {
           returntomain = true;
@@ -774,9 +906,17 @@ void scopeMode()
   }
 }
 
+void exportData()
+{
+  
+}
+
 void logicMode()
 {
   tft.fillScreen(COLOR_BLACK);
+  #ifndef __AVR_ATmega2560__
+  #warning logic not implemented for Uno
+  #else __AVR_ATmega2560__
   DDRA = B00000000; // Set port a to inputs
   dtbuffered_ns = 893;
   #warning sample rate is only a rough estimate
@@ -785,6 +925,7 @@ void logicMode()
     //PORTA is pins 22-29
     ADCBuffer[i] = PINA;
   }
+  #endif
   plotStatusBar();
   plotdigitaldata();
   plotHorizScale();
@@ -829,6 +970,12 @@ void logicMode()
             plotDigitalInformation();
             delay(25);
             break;
+          case TRIGGER:
+            if(0 == triggertype)
+              triggertype = FALLINGEDGE;
+            else
+              triggertype--;
+            break;
         }
         //Serial.print("usperdiv = ");
         //Serial.println(MySettings.usperdiv);
@@ -872,61 +1019,85 @@ void logicMode()
         //Serial.println("Touch in the middle third...");
         if( PLOTTERY + PLOTTERH/2 > tp.y ) // Top half
         {
-          if(COARSEADJUST == leftfunc)
+          switch(rightfunc)
           {
-            vcoarseindex++;
-            if(9==vcoarseindex)
-            {
-              vcoarseindex = 0;
-              vpower++;
-            }
-          } else {
-            vfineadjust++;
-            if(vfineadjust > vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex])
-            {
-              vfineadjust = 0;
-              vcoarseindex++;
-              if(9==vcoarseindex)
+            case SCALE:
+              if(COARSEADJUST == leftfunc)
               {
-                vcoarseindex = 0;
-                vpower++;
-              }
-            }
-          }
-          MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
-          plotdigitaldata();
-          plotStatusBar();
-          //Serial.print("uVperdiv = ");
-          //Serial.println(MySettings.uVperdiv);
-        } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
-          if(COARSEADJUST == leftfunc)
-          {
-            if(0<vcoarseindex)
-            {
-              vcoarseindex--;
-            } else {
-              vcoarseindex = 7;
-              vpower--;
-            }
-          } else {
-            if(0==vfineadjust)
-            {
-              if(0<vcoarseindex)
-              {
-                vcoarseindex--;
+                vcoarseindex++;
+                if(9==vcoarseindex)
+                {
+                  vcoarseindex = 0;
+                  vpower++;
+                }
               } else {
-                vcoarseindex = 7;
-                vpower--;
+                vfineadjust++;
+                if(vfineadjust > vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex])
+                {
+                  vfineadjust = 0;
+                  vcoarseindex++;
+                  if(9==vcoarseindex)
+                  {
+                    vcoarseindex = 0;
+                    vpower++;
+                  }
+                }
               }
-              vfineadjust = vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex]+1;
-            }
-            vfineadjust--;
+              MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
+              plotdigitaldata();
+              plotStatusBar();
+              //Serial.print("uVperdiv = ");
+              //Serial.println(MySettings.uVperdiv);
+              break;
+            case TRIGGER:
+              restoreplotrow();
+              if(255>triggerlevel)
+                triggerlevel++;
+              storeplotrow();
+              tft.drawFastHLine(PLOTTERX,counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
+              break;
           }
-          MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
-          plotdigitaldata();
-          plotStatusBar();
-          //Serial.print("uVperdiv = ");
-          //Serial.println(MySettings.uVperdiv);
+        } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
+          switch(rightfunc)
+          {
+            case SCALE:
+              if(COARSEADJUST == leftfunc)
+              {
+                if(0<vcoarseindex)
+                {
+                  vcoarseindex--;
+                } else {
+                  vcoarseindex = 7;
+                  vpower--;
+                }
+              } else {
+                if(0==vfineadjust)
+                {
+                  if(0<vcoarseindex)
+                  {
+                    vcoarseindex--;
+                  } else {
+                    vcoarseindex = 7;
+                    vpower--;
+                  }
+                  vfineadjust = vcoarsescale[vcoarseindex+1]-vcoarsescale[vcoarseindex]+1;
+                }
+                vfineadjust--;
+              }
+              MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
+              plotdigitaldata();
+              plotStatusBar();
+              break;
+              //Serial.print("uVperdiv = ");
+              //Serial.println(MySettings.uVperdiv);
+              break;
+            case TRIGGER:
+              restoreplotrow();
+              if(0<triggerlevel)
+                triggerlevel--;
+              storeplotrow();
+              tft.drawFastHLine(PLOTTERX,counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
+          }
         }
         //Serial.println("Undefined touch in the middle third");
       } else {                                                                             // ******RIGHT THIRD******
@@ -936,8 +1107,10 @@ void logicMode()
           if(CURSOR==rightfunc)
           {
             restoreplotcolumn();
+          } else if (TRIGGER==rightfunc) {
+            restoreplotrow();
           }
-          rightfunc = (rightfunc+1)%3;
+          rightfunc = (rightfunc+1)%NUMRFUNCS;
           plotStatusBar();
           if( CURSOR == rightfunc )
           {
@@ -971,6 +1144,9 @@ void logicMode()
               tft.drawFastVLine(PLOTTERX + index_to_hpixels( scrollindex, cursorpos ),PLOTTERY,PLOTTERH,COLOR_RED);
               plotDigitalInformation();
               delay(25);
+              break;
+            case TRIGGER:
+              triggertype = (triggertype+1)%2;
               break;
           }
         } else if ( PLOTTERY+PLOTTERH < tp.y) {
