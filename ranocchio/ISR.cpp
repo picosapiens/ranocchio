@@ -35,16 +35,16 @@ ISR(ADC_vect)
 	// than 8-bit precision is required, it is sufficient to read ADCH.
 	// Otherwise, ADCL must be read first, then ADCH.
 	ADCBuffer[ADCCounter] = ADCH;
-  triplesum = triplesum - ADCBuffer[(ADCCounter+ADCBUFFERSIZE-2)%ADCBUFFERSIZE] + ADCBuffer[ADCCounter];
+  //triplesum = triplesum - ADCBuffer[(ADCCounter+ADCBUFFERSIZE-2)%ADCBUFFERSIZE] + ADCBuffer[ADCCounter];
   //TODO Figure out how to not act on this until we actually have three valid points
-
+/*
   switch(triggerstatus)
   {
     case 0: // ready
       if(((RISINGEDGE==triggertype) && (triplesum < tripletrig))||((FALLINGEDGE==triggertype) && (triplesum > tripletrig)))
       {
         triggerstatus++;
-        Serial.print("trigger armed, stopIndex = "); Serial.println(stopIndex);
+        //Serial.print("trigger armed, stopIndex = "); Serial.println(stopIndex);
       }
       break;
     case 1: // armed
@@ -52,10 +52,10 @@ ISR(ADC_vect)
       {
         triggerstatus++;
         stopIndex = (ADCCounter + waitDuration)%ADCBUFFERSIZE;
-        Serial.println("TRIGGER");
+        //Serial.println("TRIGGER");
       }
       break;     
-  }
+  }*/
 
 	ADCCounter = ( ADCCounter + 1 ) % ADCBUFFERSIZE;
 

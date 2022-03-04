@@ -37,6 +37,7 @@ uint16_t triplesum;
 
 uint8_t datamin;
 uint8_t datamax;
+uint32_t datarms;
 uint16_t datadutycyclex1000;
 long int dataperiod_us;
 long int datafreq_Hzx10;
@@ -329,8 +330,20 @@ void plotHorizScale()
 void plotInformation()
 {
   tft.fillRect(0, PLOTTERY+PLOTTERH+16, SCREENWIDTH, SCREENHEIGHT-PLOTTERY-PLOTTERH-16, COLOR_BLACK);
-  tft.setTextSize(2);
   tft.setTextColor(COLOR_WHITE);
+  tft.setTextSize(1);
+  
+  tft.setCursor(0,SCREENHEIGHT-10);
+  tft.print("[RUN]");
+
+  tft.setCursor(SCREENWIDTH/2-20,SCREENHEIGHT-10);
+  tft.print("[SETTINGS]");
+
+  tft.setCursor(SCREENWIDTH-40,SCREENHEIGHT-10);
+  tft.print("[HOME]");
+
+  tft.setTextSize(2);
+  
   long int dat;
 
   char str[45];
@@ -344,11 +357,20 @@ void plotInformation()
       tft.setTextColor(COLOR_WHITE);
       tft.setCursor(0,PLOTTERY+PLOTTERH+16);
       
-      dat = ((datamax-datamin)*vresbuffered_uV)/1000;
-      if(dat>1000)
-        sprintf(str, "Vpp=%ld.%02ldV ", dat/1000, (dat%1000)/10);
-      else
-        sprintf(str, "Vpp=%ldmV ", dat);
+      if(MySettings.displayrms)
+      {
+        dat = (datarms*vresbuffered_uV)/1000;
+        if(dat>1000)
+          sprintf(str, "Vrms=%ld.%02ldV ", dat/1000, (dat%1000)/10);
+        else
+          sprintf(str, "Vrms=%ldmV ", dat);
+      } else {
+        dat = ((datamax-datamin)*vresbuffered_uV)/1000;
+        if(dat>1000)
+          sprintf(str, "Vp-p=%ld.%02ldV ", dat/1000, (dat%1000)/10);
+        else
+          sprintf(str, "Vp-p=%ldmV ", dat);
+      }
       tft.print(str);
 
       if(datafreq_Hzx10 < 1000 )
@@ -482,13 +504,52 @@ int counts_to_vpixels( int midpt, int i)
 
 void scopeSettings()
 {
-  tft.fillScreen(COLOR_BLACK);
-  tft.setTextColor(COLOR_WHITE);
-  int pageno = 0;
+  bool returntomain = false;
+  while(!returntomain)
+  {
+    // Draw menu
+    tft.fillScreen(COLOR_BLACK);
+    tft.setTextColor(COLOR_WHITE);
+    tft.drawFastHLine(0,SCREENHEIGHT/3,SCREENWIDTH,COLOR_WHITE);
+    tft.drawFastHLine(0,2*SCREENHEIGHT/3,SCREENWIDTH,COLOR_WHITE);
+    tft.drawFastVLine(SCREENWIDTH/2,0,SCREENHEIGHT,COLOR_WHITE);
+    int pageno = 0;
+  
+    tft.setTextSize(2);
+    
+    tft.setCursor(5,5);
+    tft.print("Return");
+    tft.setCursor(5+SCREENWIDTH/2,5);
+    tft.print("V display: ");
+    if(MySettings.displayrms)
+      tft.print("RMS");
+    else
+      tft.print("P-P");
+  
+    tft.setCursor(5,5+SCREENHEIGHT/3);
+    tft.print("Auto Scale");
 
-  tft.setCursor(5,5); tft.print("Scope Settings");
-  tft.setCursor(5+SCREENHEIGHT/4,5); tft.print("Trigger: None");
-  tft.setCursor(5+SCREENHEIGHT/2,5); tft.print("Save data to SD");
+    tp.z = 0;
+    while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+      readResistiveTouch();
+
+    if( tp.x < SCREENWIDTH/2 ) // ***  Left column ***
+    {
+      if( tp.y < SCREENHEIGHT/3 ) // Top
+      {
+        returntomain = true;
+      } else if (tp.y < 2*SCREENHEIGHT/3) { // Middle
+        scrollindex = 0;
+        rightmostindex = waitDuration;
+        analyzeData(true);
+      }
+    } else { //                   *** Right column ***
+      if( tp.y < SCREENHEIGHT/3 ) // Top
+      {
+        MySettings.displayrms = !(MySettings.displayrms);
+      }
+    }
+  }
 }
 
 void datapixel(int index, int color)
@@ -654,11 +715,13 @@ void meterMode()
 void scopeMode()
 {
   bool returntomain = false;
+  int num;
 
   plotVertScale();
   plotHorizScale();
   plotStatusBar();
   plotanalogdata();
+  plotInformation();
   
   while(!returntomain)
   {
@@ -673,18 +736,26 @@ void scopeMode()
       {
         leftfunc = (leftfunc+1)%2;
         plotStatusBar();
-        delay(50);
+        delay(200);
       } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half of plot region
         switch(rightfunc)
         {
           case SCALE:
-            MySettings.usperdiv = max( MySettings.usperdiv - (MySettings.usperdiv>=1000?100:10)*(1+3*leftfunc), 10);
+            num = MySettings.usperdiv - (MySettings.usperdiv>=10000?1000:100)*(1+3*leftfunc);
+            if(num<50)
+              MySettings.usperdiv = 50;
+            else
+              MySettings.usperdiv = num;
             plotanalogdata();
             plotHorizScale();
             plotStatusBar();
             break;
           case SCROLL:
-            scrollindex = max( (scrollindex-500*(1+2*leftfunc)*MySettings.usperdiv/dtbuffered_ns) , 0);
+            num = (scrollindex-(int)500*(1+2*leftfunc)*MySettings.usperdiv/dtbuffered_ns);
+            if(num>0)
+              scrollindex = num;
+            else
+              scrollindex = 0;
             plotanalogdata();
             plotHorizScale();
             plotStatusBar();
@@ -692,7 +763,7 @@ void scopeMode()
           case CURSOR:
             restoreplotcolumn();
             cursorpos = cursorpos - 1 - 4*leftfunc;
-            if(cursorpos<scrollindex);
+            if(cursorpos<scrollindex)
               cursorpos = scrollindex;
             storeplotcolumn();
             tft.drawFastVLine(PLOTTERX + index_to_hpixels( scrollindex, cursorpos ),PLOTTERY,PLOTTERH,COLOR_RED);
@@ -749,7 +820,7 @@ void scopeMode()
         while(!freeze)
           delay(100);
         #warning Need to implement stop button so we can't get stuck waiting forever for trigger
-        #warmomg Should write an indicator to the screen to show measurement is running
+        #warning Should write an indicator to the screen to show measurement is running
         deinitADC();
         scrollindex = 0;
         plotanalogdata();
@@ -787,6 +858,7 @@ void scopeMode()
               }
               MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
               plotanalogdata();
+              analyzeData();
               plotStatusBar();
               plotVertScale();
               //Serial.print("uVperdiv = ");
@@ -842,6 +914,12 @@ void scopeMode()
               storeplotrow();
               tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
           }
+        } else if ( PLOTTERY+PLOTTERH < tp.y) { // Very bottom of screen
+          scopeSettings();
+          plotanalogdata();
+          plotStatusBar();
+          plotVertScale();
+          plotInformation();
         }
         //Serial.println("Undefined touch in the middle third");
       } else {                                                                             // ******RIGHT THIRD******
@@ -872,7 +950,7 @@ void scopeMode()
           switch(rightfunc)
           {
             case SCALE:
-              MySettings.usperdiv = min( MySettings.usperdiv + (MySettings.usperdiv)*(1+3*leftfunc), 1000000);
+              MySettings.usperdiv = min( MySettings.usperdiv + (MySettings.usperdiv>=10000?1000:100)*(1+3*leftfunc), 1000000);
               plotHorizScale();
               plotanalogdata();
               plotStatusBar();
@@ -1199,7 +1277,7 @@ int sum3(int i) // to filter out noise
   return ADCBuffer[(ADCCounter+i-1)%ADCBUFFERSIZE]+ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]+ADCBuffer[(ADCCounter+i+1)%ADCBUFFERSIZE];
 }
 
-void analyzeData() // Analyze the portion of the data displayed on the screen
+void analyzeData(bool adjustwindow) // Analyze the portion of the data displayed on the screen
 {
   // Identify signal mean
   uint8_t swingline(0);
@@ -1209,15 +1287,21 @@ void analyzeData() // Analyze the portion of the data displayed on the screen
   uint32_t lastpcrossingx10;
   uint32_t lastncrossing;
   uint32_t foundpcrossings=0;
+  uint32_t foundncrossings=0;
   uint32_t totalhightime=0;
+  int num;
   bool searchpositive=true;
+  datarms = ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE]*ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE];
   for(int i = scrollindex+1; i<=rightmostindex-1; i++)
   {
+    datarms += ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]*ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE];
     if( ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE] > datamax )
       datamax = ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE];
     if( ADCBuffer[i] < datamin )
       datamin = ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE];
   }
+  datarms = sqrt(datarms/(rightmostindex-scrollindex));
+  #warning RMS is not working
   swingline = (datamax+datamin)/2;
 
   // Find positive crossings of the mean signal
@@ -1239,6 +1323,7 @@ void analyzeData() // Analyze the portion of the data displayed on the screen
     } else {
       if ((sum3(i) > swingline*3) && (sum3(i + 1) <= swingline*3)) // triple swingline because using sum3
       {
+        foundncrossings++;
         lastncrossing = i;
         totalhightime += (lastncrossing-lastpcrossingx10/10);
         searchpositive = true;
@@ -1249,5 +1334,14 @@ void analyzeData() // Analyze the portion of the data displayed on the screen
   // Calculate period and frequency
   dataperiod_us = (lastpcrossingx10-firstpcrossingx10)*dtbuffered_ns/10000/(foundpcrossings-1);
   datafreq_Hzx10 = (long int)10000000/dataperiod_us;
+  #warning frequency count is not working
   datadutycyclex1000 = 1000*(10*totalhightime-(searchpositive?lastncrossing*10-lastpcrossingx10:0))/(lastpcrossingx10-firstpcrossingx10);
+
+ if(adjustwindow && foundncrossings)
+ {
+    scrollindex = firstpcrossingx10/10;
+    MySettings.usperdiv = (2*dtbuffered_ns*lastncrossing/foundncrossings - scrollindex)/6000 + 1;
+    
+    #warning need to scale vertical axis and (once we have a vertical scroll) vertical position
+ }
 }

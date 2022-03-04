@@ -150,6 +150,7 @@ typedef struct {
   uint32_t uVperdiv;
   uint32_t usperdiv;
   uint8_t ADCprescaler;
+  bool displayrms;
 } RanocchioSettings;
 
 extern volatile int16_t scrollindex;
@@ -196,7 +197,8 @@ void exportData();
 // https://www.youtube.com/watch?v=exiWoeLm4Wc
 extern uint8_t datamin;
 extern uint8_t datamax;
+extern uint32_t datarms;
 int sum3(int i);
-void analyzeData();
+void analyzeData(bool adjustwindow=false);
 
 #endif // RANOCCHIO_H

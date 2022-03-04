@@ -138,9 +138,11 @@ void setup() {
   MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
   MySettings.usperdiv = 2000;
   MySettings.ADCprescaler = 8;
+  MySettings.displayrms = true;
   #warning ADCprescaler=4 doesn't work -- may need to do something to get it to stop at 6 bits?
   rightfunc = SCALE;
   leftfunc = COARSEADJUST;
+  triggertype = NOTRIGGER;
 
   // Mega uses different pins that will need to be sorted out
   /*
