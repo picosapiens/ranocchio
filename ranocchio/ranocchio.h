@@ -30,6 +30,7 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include "Girino.h"
+#include "touchkbd.h"
 #include <SD.h>
 //define TouchScreen TouchScreen_kbv
 //define TSPoint TSPoint_kbv;
@@ -68,6 +69,8 @@ extern int YM;
 
 extern TouchScreen ts;
 extern TSPoint tp;
+
+extern bool SDready;
 
 extern volatile uint32_t dtbuffered_ns;
 extern volatile uint32_t vresbuffered_uV;
@@ -183,6 +186,8 @@ void mainMenu();
 void meterMode();
 void scopeMode();
 void logicMode();
+
+void saveBufferToSd();
 
 void scopeSettings();
 

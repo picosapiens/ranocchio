@@ -143,28 +143,7 @@ void setup() {
   rightfunc = SCALE;
   leftfunc = COARSEADJUST;
   triggertype = NOTRIGGER;
-
-  // Mega uses different pins for hardware SPI. In theory it should be possible to work if you change the pin connections
-  // as shown below. Instead, though, the approach is taken to use software SPI. This requires modifying Sd2Card.h and .cpp
-  // in the Adafruit SD card library from https://github.com/adafruit/SD, and define MEGA_SOFT_SPI 1.
-  // 
-  // SPI  Uno  Mega
-  //  SS  10   53
-  //MOSI  11   51
-  //MISO  12   50
-  // SCK  13   52
-  #warning this will only compile properly if USE_SPI_LIB has been commented out in Sd2Card.h and .cpp, and define MEGA_SOFT_SPI 1
-  //pinMode(53,OUTPUT);
-  //digitalWrite(53, LOW); // Low enable
-  //pinMode(A3,OUTPUT);
-  //digitalWrite(A3,HIGH); // LCD Disable
-  //SoftwareSerial ss(8,9)/ % Rx, Tx
-  SDready = SD.begin();
-  if(!SDready)
-    Serial.println("SD card failed to begin");
-  root = SD.open("/");
-  printDirectory(root, 0);
-  delay(3000);
+  SDready = false;
 }
 
 void loop() {

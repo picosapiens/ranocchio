@@ -521,6 +521,7 @@ void scopeSettings()
     tft.print("Return");
     tft.setCursor(5+SCREENWIDTH/2,5);
     tft.print("V display: ");
+    tft.setCursor(5+SCREENWIDTH/2,20);
     if(MySettings.displayrms)
       tft.print("RMS");
     else
@@ -528,6 +529,9 @@ void scopeSettings()
   
     tft.setCursor(5,5+SCREENHEIGHT/3);
     tft.print("Auto Scale");
+
+    tft.setCursor(5+SCREENWIDTH/2,5+SCREENHEIGHT/3);
+    tft.print("Save to SD");
 
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
@@ -547,6 +551,8 @@ void scopeSettings()
       if( tp.y < SCREENHEIGHT/3 ) // Top
       {
         MySettings.displayrms = !(MySettings.displayrms);
+      } else if ( tp.y < 2*SCREENHEIGHT/3) { // Middle
+        saveBufferToSd();
       }
     }
   }
@@ -1272,6 +1278,78 @@ void plotdigitaldata()
   }
 }
 
+void saveBufferToSd()
+{
+  // Mega uses different pins for hardware SPI. In theory it should be possible to work if you change the pin connections
+  // as shown below. Instead, though, the approach is taken to use software SPI. This requires modifying Sd2Card.h and .cpp
+  // in the Adafruit SD card library from https://github.com/adafruit/SD, and define MEGA_SOFT_SPI 1.
+  // 
+  // SPI  Uno  Mega
+  //  SS  10   53
+  //MOSI  11   51
+  //MISO  12   50
+  // SCK  13   52
+  #warning this will only compile properly if USE_SPI_LIB has been commented out in Sd2Card.h and .cpp, and define MEGA_SOFT_SPI 1
+  
+  // Initialize SD card if needed
+  if(!SDready)
+    SDready = SD.begin();
+  if(!SDready)
+  {
+    tft.fillScreen(COLOR_BLACK);
+    tft.setCursor(1,10);
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_WHITE);
+    tft.print("Unable to open SD card!");
+    tp.z = 0;
+    while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+      readResistiveTouch();
+    return;
+  }
+
+  // Get file name
+  char str[11];
+  str[0] = '\0';
+  int i = touchkeyinput(str, 8, "Enter file name");
+  if(0==i)
+    return; // Don't proceed without at least one character in the file name
+  str[i] = '.';
+  str[i+1] = 'm';
+  str[i+2] = '\0';
+  
+
+  File myFile = SD.open(str, FILE_WRITE);
+  if (myFile)
+  {
+    myFile.println("% Ranocchio scopemeter output file");
+    myFile.println("");
+    myFile.print("timestep_ns = "); myFile.print(dtbuffered_ns); myFile.println(";");
+    myFile.println("");
+    myFile.print("microvolts_per_count = "); myFile.print(vresbuffered_uV); myFile.println(";");
+    myFile.println("");
+    myFile.println("Data = [");
+    myFile.print(ADCBuffer[ADCCounter]);
+    for(int i=0; i<ADCBUFFERSIZE; i++)
+    {
+      myFile.print(',');
+      myFile.print(ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]);
+    }
+    myFile.println("];");
+    myFile.close();
+  } else {
+    myFile.close();
+    tft.fillScreen(COLOR_BLACK);
+    tft.setCursor(1,10);
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_WHITE);
+    tft.print("Unable to write to file!");
+    tp.z = 0;
+    while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+      readResistiveTouch();
+    return;
+  }
+}
+
 int sum3(int i) // to filter out noise
 {
   return ADCBuffer[(ADCCounter+i-1)%ADCBUFFERSIZE]+ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]+ADCBuffer[(ADCCounter+i+1)%ADCBUFFERSIZE];
@@ -1291,17 +1369,16 @@ void analyzeData(bool adjustwindow) // Analyze the portion of the data displayed
   uint32_t totalhightime=0;
   int num;
   bool searchpositive=true;
-  datarms = ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE]*ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE];
+  datarms = sq((int16_t)ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE]-128);
   for(int i = scrollindex+1; i<=rightmostindex-1; i++)
   {
-    datarms += ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]*ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE];
+    datarms += sq((int16_t)ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]-128);
     if( ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE] > datamax )
       datamax = ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE];
-    if( ADCBuffer[i] < datamin )
+    if( ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE] < datamin )
       datamin = ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE];
   }
   datarms = sqrt(datarms/(rightmostindex-scrollindex));
-  #warning RMS is not working
   swingline = (datamax+datamin)/2;
 
   // Find positive crossings of the mean signal
