@@ -1,7 +1,7 @@
 //-----------------------------------------------------------------------------
 // Girino.h
 //-----------------------------------------------------------------------------
-// Copyright 2012 Cristiano Lino Fontana
+// Copyright 2012 Cristiano Lino Fontana. Modified in 2022 by picosapiens.
 //
 // This file is part of Girino.
 //

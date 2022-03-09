@@ -157,6 +157,7 @@ typedef struct {
 } RanocchioSettings;
 
 extern volatile int16_t scrollindex;
+extern volatile int32_t verticalmidpoint;
 extern int16_t rightmostindex;
 extern int16_t cursorpos;
 
@@ -165,7 +166,7 @@ extern volatile RanocchioSettings MySettings;
 void plotanalogdata(); //analog data
 void plotdigitaldata();
 int index_to_hpixels( int start, int i );
-int counts_to_vpixels( int midpt, int i);
+int counts_to_vpixels( long int midpt, int i);
 void plotVertScale();
 void plotHorizScale();
 void plotStatusBar();

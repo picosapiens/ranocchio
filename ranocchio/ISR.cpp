@@ -1,7 +1,7 @@
 //-----------------------------------------------------------------------------
 // ISR.cpp
 //-----------------------------------------------------------------------------
-// Copyright 2012 Cristiano Lino Fontana
+// Copyright 2012 Cristiano Lino Fontana. Modified in 2022 by picosapiens.
 //
 // This file is part of Girino.
 //
@@ -73,7 +73,7 @@ ISR(ADC_vect)
 }
 
 //-----------------------------------------------------------------------------
-// Analog Comparator interrupt - not used in Ranocchio
+// Analog Comparator interrupt - not available on Mega
 //-----------------------------------------------------------------------------
 /*ISR(ANALOG_COMP_vect)
 {

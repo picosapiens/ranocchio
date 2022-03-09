@@ -60,6 +60,7 @@ uint8_t triggertype = 0;
 volatile uint32_t dtbuffered_ns = 6535;
 volatile uint32_t vresbuffered_uV = 19607;
 volatile int16_t scrollindex=0;
+volatile int32_t verticalmidpoint;
 int16_t cursorpos=0;
 int16_t rightmostindex=0;
 
@@ -139,6 +140,7 @@ void setup() {
   MySettings.usperdiv = 2000;
   MySettings.ADCprescaler = 8;
   MySettings.displayrms = true;
+  verticalmidpoint = 0;
   #warning ADCprescaler=4 doesn't work -- may need to do something to get it to stop at 6 bits?
   rightfunc = SCALE;
   leftfunc = COARSEADJUST;

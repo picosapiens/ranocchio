@@ -142,7 +142,7 @@ void plotVertScale()
   tft.fillRect(0,PLOTTERY, SCREENWIDTH-PLOTTERW, PLOTTERH+1, COLOR_BLACK);
   if(NOTRIGGER != triggermode)
   {
-    tft.drawFastHLine(0,PLOTTERY + PLOTTERH - counts_to_vpixels(0,triggerlevel),PLOTTERX,COLOR_BLUE);
+    tft.drawFastHLine(0,PLOTTERY + PLOTTERH - counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERX,COLOR_BLUE);
   }
   tft.setTextSize(1);
   tft.setTextColor(COLOR_WHITE);
@@ -430,7 +430,7 @@ void storeplotcolumn()
 
 void storeplotrow()
 {
-  pixelsx = PLOTTERY + PLOTTERH - counts_to_vpixels( 0, triggerlevel); // y coordinate
+  pixelsx = PLOTTERY + PLOTTERH - counts_to_vpixels( verticalmidpoint, triggerlevel); // y coordinate
   tft.readGRAM( PLOTTERX, pixelsx, pixels, PLOTTERW, 1);
 }
 
@@ -461,7 +461,7 @@ void plotanalogdata()
   for( int i = 0; i<=PLOTTERH; i=i+YDIVPIXELS) tft.drawFastHLine(PLOTTERX,i+PLOTTERY,PLOTTERW,COLOR_DARKERGREY);
 
   // Plot the data
-  int y0 = PLOTTERY + PLOTTERH - counts_to_vpixels(0, ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE]);
+  int y0 = PLOTTERY + PLOTTERH - counts_to_vpixels(verticalmidpoint, ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE]);
   //Serial.print("Data starts here\n");
   //Serial.println(ADCBuffer[ADCCounter+waitDuration]);
   int y1;
@@ -471,7 +471,7 @@ void plotanalogdata()
   for (int i = scrollindex; i<ADCBUFFERSIZE; i++)
   {
     x1 = PLOTTERX + index_to_hpixels( scrollindex, i ); //map(i,0,ADCBUFFERSIZE,PLOTTERX,PLOTTERX+PLOTTERW);
-    y1 = PLOTTERY + PLOTTERH - counts_to_vpixels(0, ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]);
+    y1 = PLOTTERY + PLOTTERH - counts_to_vpixels(verticalmidpoint, ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]);
     if( x1 > PLOTTERX + PLOTTERW )
     {
       break;
@@ -497,8 +497,9 @@ int index_to_hpixels( int start, int i )
   return map(i,start,start+(2000*(uint32_t)PLOTTERW / XDIVPIXELS)*MySettings.usperdiv/dtbuffered_ns,0,2*PLOTTERW);
 }
 
-int counts_to_vpixels( int midpt, int i)
+int counts_to_vpixels( long int midpt, int i)
 {
+  //Serial.print("counts_to_vpixels called with midpoint = "); Serial.println(midpt);
   return map(((long int)i-128)*vresbuffered_uV,midpt-((int32_t)PLOTTERH / YDIVPIXELS)*MySettings.uVperdiv/2,  midpt+((int32_t)PLOTTERH / YDIVPIXELS)*MySettings.uVperdiv/2, 0, PLOTTERH);
 }
 
@@ -562,7 +563,7 @@ void datapixel(int index, int color)
 {
   // Redraw the pixel as a yellow green dot
   int x = PLOTTERX + index_to_hpixels( scrollindex, index ); //map(i,0,ADCBUFFERSIZE,PLOTTERX,PLOTTERX+PLOTTERW);
-  int y = PLOTTERY + PLOTTERH - counts_to_vpixels(0, ADCBuffer[(ADCCounter+index)%ADCBUFFERSIZE]);
+  int y = PLOTTERY + PLOTTERH - counts_to_vpixels(verticalmidpoint, ADCBuffer[(ADCCounter+index)%ADCBUFFERSIZE]);
   tft.drawPixel(x,y,color);
 }
 
@@ -870,12 +871,18 @@ void scopeMode()
               //Serial.print("uVperdiv = ");
               //Serial.println(MySettings.uVperdiv);
               break;
+            case SCROLL:
+              verticalmidpoint = verticalmidpoint + MySettings.uVperdiv/(COARSEADJUST==leftfunc?1:5);
+              Serial.print("verticalmidpoint = "); Serial.println(verticalmidpoint);
+              plotanalogdata();
+              plotVertScale();
+              break;
             case TRIGGER:
               restoreplotrow();
               if(255>triggerlevel)
                 triggerlevel++;
               storeplotrow();
-              tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
+              tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERW,COLOR_BLUE);
               break;
           }
         } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
@@ -910,15 +917,19 @@ void scopeMode()
               plotStatusBar();
               plotVertScale();
               break;
-              //Serial.print("uVperdiv = ");
-              //Serial.println(MySettings.uVperdiv);
+            case SCROLL:
+              verticalmidpoint = verticalmidpoint - MySettings.uVperdiv/(COARSEADJUST==leftfunc?1:5);
+              Serial.print("verticalmidpoint = "); Serial.println(verticalmidpoint);
+              plotanalogdata();
+              plotVertScale();
               break;
             case TRIGGER:
               restoreplotrow();
               if(0<triggerlevel)
                 triggerlevel--;
               storeplotrow();
-              tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
+              tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERW,COLOR_BLUE);
+              break;
           }
         } else if ( PLOTTERY+PLOTTERH < tp.y) { // Very bottom of screen
           scopeSettings();
@@ -948,7 +959,7 @@ void scopeMode()
             tft.drawFastVLine(PLOTTERX + index_to_hpixels( scrollindex, cursorpos ),PLOTTERY,PLOTTERH,COLOR_RED);
           } else if ( TRIGGER == rightfunc ) {
             storeplotrow();
-            tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
+            tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERW,COLOR_BLUE);
           }
           plotInformation();
           delay(50); // Not doing a data redraw, so pause a moment to prevent too many responses to touches
@@ -1003,7 +1014,8 @@ void logicMode()
   #else __AVR_ATmega2560__
   DDRA = B00000000; // Set port a to inputs
   dtbuffered_ns = 893;
-  #warning sample rate is only a rough estimate
+  #warning logic sample rate is only a rough estimate
+  vresbuffered_uV = 0; // so the oscilloscope doesn't try to interpret as analog data
   for(int i = 0; i<ADCBUFFERSIZE; i++)
   {
     //PORTA is pins 22-29
@@ -1138,7 +1150,7 @@ void logicMode()
               if(255>triggerlevel)
                 triggerlevel++;
               storeplotrow();
-              tft.drawFastHLine(PLOTTERX,counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
+              tft.drawFastHLine(PLOTTERX,counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERW,COLOR_BLUE);
               break;
           }
         } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
@@ -1180,7 +1192,7 @@ void logicMode()
               if(0<triggerlevel)
                 triggerlevel--;
               storeplotrow();
-              tft.drawFastHLine(PLOTTERX,counts_to_vpixels(0,triggerlevel),PLOTTERW,COLOR_BLUE);
+              tft.drawFastHLine(PLOTTERX,counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERW,COLOR_BLUE);
           }
         }
         //Serial.println("Undefined touch in the middle third");
@@ -1336,8 +1348,10 @@ void saveBufferToSd()
     }
     myFile.println("];");
     myFile.close();
+    SD.close();
   } else {
     myFile.close();
+    SD.close();
     tft.fillScreen(COLOR_BLACK);
     tft.setCursor(1,10);
     tft.setTextSize(2);
@@ -1355,7 +1369,7 @@ int sum3(int i) // to filter out noise
   return ADCBuffer[(ADCCounter+i-1)%ADCBUFFERSIZE]+ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]+ADCBuffer[(ADCCounter+i+1)%ADCBUFFERSIZE];
 }
 
-void analyzeData(bool adjustwindow) // Analyze the portion of the data displayed on the screen
+void analyzeData(bool adjustwindow) // Analyze the portion of the data between scrollindex and rightmostindex
 {
   // Identify signal mean
   uint8_t swingline(0);
@@ -1420,5 +1434,6 @@ void analyzeData(bool adjustwindow) // Analyze the portion of the data displayed
     MySettings.usperdiv = (2*dtbuffered_ns*lastncrossing/foundncrossings - scrollindex)/6000 + 1;
     
     #warning need to scale vertical axis and (once we have a vertical scroll) vertical position
+    verticalmidpoint = swingline*vresbuffered_uV;
  }
 }
