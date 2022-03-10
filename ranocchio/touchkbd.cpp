@@ -81,6 +81,7 @@ int touchkeyinput(char* s, int numchars, char* instructions)
               if(numchars>index)
               {
                 s[index] = keyboardkeys[row][col];
+                s[index+1] = '\0';
                 tft.print(s[index]);
                 Serial.print(", char = "); Serial.println(s[index]);
                 index ++;

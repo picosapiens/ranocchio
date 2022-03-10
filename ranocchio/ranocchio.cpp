@@ -117,28 +117,10 @@ TSPoint tp;                            //global point
 
 void plotVertScale()
 { 
-  long int wholepart = MySettings.uVperdiv*2;
-  int fracpart = 0;
-  char prefix = 'u';
-  while(wholepart >= 1000)
-  {
-    fracpart = (wholepart%1000)/100;
-    wholepart = wholepart/1000;
-    switch (prefix)
-    {
-      case 'u':
-        prefix = 'm';
-        break;
-      case 'm':
-        prefix = ' ';
-        break;
-      case ' ':
-        prefix = 'k'; // Should never get this high
-        break;
-      default:
-        prefix = '?'; // failure to prefix
-    }
-  }
+  char value[4];
+  char sign_units[4] = " uV";
+  
+  
   tft.fillRect(0,PLOTTERY, SCREENWIDTH-PLOTTERW, PLOTTERH+1, COLOR_BLACK);
   if(NOTRIGGER != triggermode)
   {
@@ -146,34 +128,32 @@ void plotVertScale()
   }
   tft.setTextSize(1);
   tft.setTextColor(COLOR_WHITE);
-  
+
+  sprintf(sign_units," uV");
+  format3char( verticalmidpoint+MySettings.uVperdiv*2, value, sign_units );
   tft.setCursor(0,PLOTTERY);
-  tft.print(wholepart);
-  if( 10>wholepart )
-  {
-    tft.print('.');
-    tft.print(fracpart);
-  }
+  tft.print(value);
   tft.setCursor(0,PLOTTERY+8);
-  tft.print('+');
-  tft.print(prefix);
-  tft.print('V');
-  
+  tft.print(sign_units);
+
+  sprintf(sign_units," uV");
+  format3char( verticalmidpoint-MySettings.uVperdiv*2, value, sign_units );
   tft.setCursor(0,PLOTTERY+PLOTTERH-16);
-  tft.print('-');
-  tft.print(prefix);
-  tft.print('V');
+  tft.print(sign_units);
   tft.setCursor(0,PLOTTERY+PLOTTERH-8);
-  tft.print(wholepart);
-  if( 10>wholepart )
-  {
-    tft.print('.');
-    tft.print(fracpart);
-  }
+  tft.print(value);
 }
 
 void format3char( long int number, char* value, char* sign_units )
 {
+  if(0>number)
+  {
+    number = abs(number);
+    sign_units[0] = '-';
+  } else {
+    sign_units[0] = '+';
+  }
+  
   uint16_t fractpart = 0;
   while(number >= 1000)
   {
@@ -361,22 +341,24 @@ void plotInformation()
       {
         dat = (datarms*vresbuffered_uV)/1000;
         if(dat>1000)
-          sprintf(str, "Vrms=%ld.%02ldV ", dat/1000, (dat%1000)/10);
+          sprintf(str, "RMS=%ld.%02ldV ", dat/1000, (dat%1000)/10);
         else
-          sprintf(str, "Vrms=%ldmV ", dat);
+          sprintf(str, "RMS=%ldmV ", dat);
       } else {
         dat = ((datamax-datamin)*vresbuffered_uV)/1000;
         if(dat>1000)
-          sprintf(str, "Vp-p=%ld.%02ldV ", dat/1000, (dat%1000)/10);
+          sprintf(str, "P-P=%ld.%02ldV ", dat/1000, (dat%1000)/10);
         else
-          sprintf(str, "Vp-p=%ldmV ", dat);
+          sprintf(str, "P-P=%ldmV ", dat);
       }
       tft.print(str);
 
       if(datafreq_Hzx10 < 1000 )
         sprintf(str, "f=%ld.%ldHz ", datafreq_Hzx10/10, datafreq_Hzx10%10);
-      else
+      else if (datafreq_Hzx10 > 0)
         sprintf(str, "f=%ldHz ", datafreq_Hzx10/10);
+      else
+        sprintf(str, "f=??? ");
       tft.print(str);
 
       sprintf(str, "d%%=%u.%u", datadutycyclex1000/10, datadutycyclex1000%10);
@@ -534,6 +516,9 @@ void scopeSettings()
     tft.setCursor(5+SCREENWIDTH/2,5+SCREENHEIGHT/3);
     tft.print("Save to SD");
 
+    tft.setCursor(5, 5 + 2*SCREENHEIGHT/3);
+    tft.print("Save Screenshot");
+
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
       readResistiveTouch();
@@ -547,6 +532,8 @@ void scopeSettings()
         scrollindex = 0;
         rightmostindex = waitDuration;
         analyzeData(true);
+      } else { // Bottom
+        saveScreenshotToSd();
       }
     } else { //                   *** Right column ***
       if( tp.y < SCREENHEIGHT/3 ) // Top
@@ -1348,10 +1335,8 @@ void saveBufferToSd()
     }
     myFile.println("];");
     myFile.close();
-    SD.close();
   } else {
     myFile.close();
-    SD.close();
     tft.fillScreen(COLOR_BLACK);
     tft.setCursor(1,10);
     tft.setTextSize(2);
@@ -1362,6 +1347,110 @@ void saveBufferToSd()
       readResistiveTouch();
     return;
   }
+}
+
+// Derived from http://www.technoblogy.com/show?398X
+void saveScreenshotToSd()
+{
+  // Initialize SD card if needed
+  if(!SDready)
+    SDready = SD.begin();
+  if(!SDready)
+  {
+    tft.fillScreen(COLOR_BLACK);
+    tft.setCursor(1,10);
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_WHITE);
+    tft.print("Unable to open SD card!");
+    tp.z = 0;
+    while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+      readResistiveTouch();
+    return;
+  }
+
+  // Get file name
+  char filename[13];
+  filename[0] = '\0';
+  int i = touchkeyinput(filename, 8, "Enter file name");
+  if(0==i)
+    return; // Don't proceed without at least one character in the file name
+  filename[i] = '.';
+  filename[i+1] = 'b';
+  filename[i+2] = 'm';
+  filename[i+3] = 'p';
+  filename[i+4] = '\0';
+
+  char caption[26];
+  caption[0] = '\0';
+  i = touchkeyinput(caption, 25, "Enter caption");
+
+  plotanalogdata();
+  plotVertScale();
+  plotHorizScale();
+  plotStatusBar();
+  tft.fillRect(0, PLOTTERY+PLOTTERH+16, SCREENWIDTH, SCREENHEIGHT-PLOTTERY-PLOTTERH-16, COLOR_BLACK);
+  tft.setTextColor(COLOR_WHITE);
+  tft.setTextSize(2);
+  tft.setCursor(2,SCREENHEIGHT-24);
+  tft.print(caption);
+
+  #define BMPSIZE (54 + 4 * 320 * 240)
+  #define BMPNUM (320*240)
+
+  uint32_t filesize, offset;
+  uint16_t width = tft.width(), height = tft.height();
+
+  #define writeFour(a) bmpFile.write((unsigned char)( (a) )); bmpFile.write((unsigned char)( (a) >> 8)); bmpFile.write((unsigned char)( (a) >> 16)); bmpFile.write((unsigned char)( (a) >> 32))
+  #define writeTwo(a) bmpFile.write((unsigned char)( (a) )); bmpFile.write((unsigned char)( (a) >> 8));
+  File bmpFile = SD.open(filename, FILE_WRITE);
+  if (!bmpFile)
+  {
+    tft.fillScreen(COLOR_BLACK);
+    tft.setCursor(1,10);
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_WHITE);
+    tft.print("Unable to write file!");
+    tp.z = 0;
+    while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+      readResistiveTouch();
+    return;
+  }
+  
+  // File header: 14 bytes
+  bmpFile.write('B'); bmpFile.write('M');
+  writeFour(14+40+12+width*height*2); // File size in bytes
+  writeFour(0);
+  writeFour(14+40+12);                // Offset to image data from start
+  //
+  // Image header: 40 bytes
+  writeFour(40);                      // Header size
+  writeFour(width);                   // Image width
+  writeFour(height);                  // Image height
+  writeTwo(1);                        // Planes
+  writeTwo(16);                       // Bits per pixel
+  writeFour(0);                       // Compression (none)
+  writeFour(0);                       // Image size (0 for uncompressed)
+  writeFour(0);                       // Preferred X resolution (ignore)
+  writeFour(0);                       // Preferred Y resolution (ignore)
+  writeFour(0);                       // Colour map entries (ignore)
+  writeFour(0);                       // Important colours (ignore)
+  //
+  // Colour masks: 12 bytes
+  writeFour(0b0000011111100000);      // Green
+  writeFour(0b1111100000000000);      // Red
+  writeFour(0b0000000000011111);      // Blue
+  //
+  // Image data: width * height * 2 bytes
+  for (int y=height-1; y>=0; y--) {
+    for (int x=0; x<width; x++) {
+      writeTwo(tft.readPixel(x,y));    // Each row must be a multiple of four bytes
+    }
+  }
+  
+  // Close the file
+  bmpFile.close();
+  
+  return;
 }
 
 int sum3(int i) // to filter out noise

@@ -189,6 +189,7 @@ void scopeMode();
 void logicMode();
 
 void saveBufferToSd();
+void saveScreenshotToSd();
 
 void scopeSettings();
 

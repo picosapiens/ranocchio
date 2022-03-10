@@ -130,6 +130,9 @@ void setup() {
   // Maybe it doesn't like it being left adjusted? rawVal = (ADCL | (ADCH << 8))
   // initADC makes it go to 1023. Something in there isn't playing nice with analogRead()
 
+  TCCR5B = TCCR5B & B11111000 | B00000001;  // for PWM frequency of 31372.55 Hz
+  //TCCR5B = TCCR5B & B11111000 | B00000010;  // for PWM frequency of  3921.16 Hz on pins 44-46  https://www.etechnophiles.com/how-to-change-pwm-frequency-of-arduino-mega/
+  pinMode(46,OUTPUT);
   analogWrite(46,128);
 
   vcoarseindex = 3;
