@@ -237,6 +237,11 @@ void plotStatusBar()
       tft.drawFastVLine(232,0,8,COLOR_WHITE);
       tft.drawFastHLine(233,8,7,COLOR_WHITE);
       break;
+    case ANYEDGE:
+      tft.drawFastHLine(226,0,15,COLOR_WHITE);
+      tft.drawFastVLine(232,0,8,COLOR_WHITE);
+      tft.drawFastHLine(233,0,15,COLOR_WHITE);
+      break;
     case NOTRIGGER:
       tft.setCursor(226,0);
       tft.print("TR");
@@ -766,7 +771,7 @@ void scopeMode()
             delay(25);
             break;
           case TRIGGER:
-            triggertype = (triggertype+1)%3;
+            triggertype = (triggertype+1)%NUMTTYPES;
             plotStatusBar();
             delay(100);
             break;
@@ -776,8 +781,8 @@ void scopeMode()
       } else if ( PLOTTERY+PLOTTERH < tp.y) { // Very bottom of screen
         //Serial.println("Running scope...");
         memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
-        triplesum = 0;
-        tripletrig = 3*triggerlevel;
+        /*triplesum = 0;
+        tripletrig = 3*triggerlevel;*/
         sei();
         initPins();
         initADC();
@@ -785,13 +790,23 @@ void scopeMode()
         //ADCCounter=0;
         startADC();
         //delay(10); // Takes a little while to get going?
-        if(NOTRIGGER == triggertype)
+        switch(triggertype)
         {
-          triggerstatus = 2; //immegiately mark as triggered
-          stopIndex = ( ADCCounter + waitDuration ) % ADCBUFFERSIZE;
-        } else {
-          triggerstatus = 0; // ready
-          stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
+          case NOTRIGGER:
+            stopIndex = ( ADCCounter + ADCCounter-1 ) % ADCBUFFERSIZE; // fill the whole buffer
+            break;
+          case RISINGEDGE:
+            stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
+            attachInterrupt(digitalPinToInterrupt(18),triggerInterrupt,RISING);
+            break;
+          case FALLINGEDGE:
+            stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
+            attachInterrupt(digitalPinToInterrupt(18),triggerInterrupt,FALLING);
+            break;
+          case ANYEDGE:
+            stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
+            attachInterrupt(digitalPinToInterrupt(18),triggerInterrupt,CHANGE);
+            break;
         }
         wait = true; freeze=false;
         
@@ -868,6 +883,7 @@ void scopeMode()
               restoreplotrow();
               if(255>triggerlevel)
                 triggerlevel++;
+              analogWrite(44,triggerlevel);
               storeplotrow();
               tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERW,COLOR_BLUE);
               break;
@@ -914,6 +930,7 @@ void scopeMode()
               restoreplotrow();
               if(0<triggerlevel)
                 triggerlevel--;
+              analogWrite(44,triggerlevel);
               storeplotrow();
               tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERW,COLOR_BLUE);
               break;
@@ -1525,4 +1542,15 @@ void analyzeData(bool adjustwindow) // Analyze the portion of the data between s
     #warning need to scale vertical axis and (once we have a vertical scroll) vertical position
     verticalmidpoint = swingline*vresbuffered_uV;
  }
+}
+
+
+void triggerInterrupt()
+{
+  // Note that the attachinterrupt function and the atmega chip itself have different conventions for numbering the interrupts.
+  // As far as Atmega is concerned, on the Mega 2560, INT1 is pin 20, INT2 is pin 19, INT3 is pin 18, INT4 is pin 2, INT5 is pin 3.
+  // https://forum.arduino.cc/t/interrupt-runs-after-flag-cleared/685526/13
+  cbi(EIMSK,INT3);
+  stopIndex = (ADCCounter + waitDuration)%ADCBUFFERSIZE;
+  Serial.println("TRIGGER");
 }

@@ -134,11 +134,13 @@ void setup() {
   //TCCR5B = TCCR5B & B11111000 | B00000010;  // for PWM frequency of  3921.16 Hz on pins 44-46  https://www.etechnophiles.com/how-to-change-pwm-frequency-of-arduino-mega/
   pinMode(46,OUTPUT);
   analogWrite(46,128);
-
+ 
   vcoarseindex = 3;
   vfineadjust = 0;
   vpower = 5;
   triggerlevel = 160;
+  pinMode(44,OUTPUT);
+  analogWrite(44,triggerlevel);
   MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
   MySettings.usperdiv = 2000;
   MySettings.ADCprescaler = 8;
@@ -147,7 +149,8 @@ void setup() {
   #warning ADCprescaler=4 doesn't work -- may need to do something to get it to stop at 6 bits?
   rightfunc = SCALE;
   leftfunc = COARSEADJUST;
-  triggertype = NOTRIGGER;
+  triggertype = RISINGEDGE;
+  pinMode(18,INPUT);
   SDready = false;
 }
 

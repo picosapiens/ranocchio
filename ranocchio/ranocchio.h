@@ -134,7 +134,9 @@ extern uint8_t triggerstatus;
 extern uint8_t triggertype;
 #define RISINGEDGE 0
 #define FALLINGEDGE 1
-#define NOTRIGGER 2
+#define ANYEDGE 2
+#define NOTRIGGER 3
+#define NUMTTYPES 4
 
 extern uint16_t tripletrig;
 extern uint16_t triplesum;
@@ -187,6 +189,8 @@ void mainMenu();
 void meterMode();
 void scopeMode();
 void logicMode();
+
+void triggerInterrupt();
 
 void saveBufferToSd();
 void saveScreenshotToSd();
