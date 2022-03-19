@@ -319,13 +319,13 @@ void plotInformation()
   tft.setTextSize(1);
   
   tft.setCursor(0,SCREENHEIGHT-10);
-  tft.print("[RUN]");
+  tft.print(F("[RUN]"));
 
   tft.setCursor(SCREENWIDTH/2-20,SCREENHEIGHT-10);
-  tft.print("[SETTINGS]");
+  tft.print(F("[SETTINGS]"));
 
   tft.setCursor(SCREENWIDTH-40,SCREENHEIGHT-10);
-  tft.print("[HOME]");
+  tft.print(F("[HOME]"));
 
   tft.setTextSize(2);
   
@@ -524,6 +524,9 @@ void scopeSettings()
     tft.setCursor(5, 5 + 2*SCREENHEIGHT/3);
     tft.print("Save Screenshot");
 
+    tft.setCursor(5 + SCREENWIDTH/2, 5 + 2*SCREENHEIGHT/3);
+    tft.print("FFT");
+
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
       readResistiveTouch();
@@ -546,9 +549,64 @@ void scopeSettings()
         MySettings.displayrms = !(MySettings.displayrms);
       } else if ( tp.y < 2*SCREENHEIGHT/3) { // Middle
         saveBufferToSd();
+      } else {
+        fftsubmode();
       }
     }
   }
+}
+
+void fftsubmode()
+{
+  tft.fillScreen(COLOR_BLACK);
+  
+  // Resample to 256 points
+  #define FFTSIZE 256
+  int8_t data[FFTSIZE], im[FFTSIZE];
+  int d = rightmostindex - scrollindex;
+  int n;
+  long int mysum = 0;
+  //Serial.println(F("Downsample:"));
+  //Serial.print(F("d = "));Serial.println(d);
+  for(int i=0;i<FFTSIZE;i++)
+  {
+       mysum = 0;
+       n=0;
+       for(int j = 0; j<d/FFTSIZE; j++) //(int)(ADCBuffer[(scrollindex+i*d/FFTSIZE)%ADCBUFFERSIZE]) - 128; // Could remove mean instead of subtracting 128?
+       {
+         mysum += (long int)(ADCBuffer[(scrollindex+map(i,0,FFTSIZE-1,0,d)+j)%ADCBUFFERSIZE]);
+         n++;
+       }
+       //Serial.print(mysum); Serial.print(' '); Serial.println(n);
+       data[i] = (mysum/n - 128);
+       im[i] = 0;
+  }
+  fix_fft(data, im, 8, 0);
+  
+  int* pwr = (int*)(&(data[0]));
+  mysum = 0;
+  for(int i=0; i<FFTSIZE/2; i++)
+  {
+    pwr[(i+FFTSIZE/4)%(FFTSIZE/2)] = (int)data[i]*data[i] + (int)im[i]*im[i];
+    if(i > 2)
+      mysum += pwr[(i+FFTSIZE/4)%(FFTSIZE/2)];
+    //Serial.println(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)]);
+  }
+  
+  for(int i=1; i<FFTSIZE/2; i++)
+  {
+    tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - map(pwr[(i-1+FFTSIZE/4)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT),map(i,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - map(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT),COLOR_GREENYELLOW);
+    //tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH), SCREENHEIGHT/2-data[i-1], map(i,0,FFTSIZE/2,0,SCREENWIDTH), SCREENHEIGHT/2-data[i], COLOR_GREENYELLOW);
+  }
+  //Serial.print("mysum = "); Serial.print(mysum); Serial.print(", principal = ");Serial.println(pwr[(2+FFTSIZE/4)%(FFTSIZE/2)] );
+  int thdx10 = (int)sqrt( 1000000*mysum / pwr[(2+FFTSIZE/4)%(FFTSIZE/2)] ); // TODO: allow referencing other than i=2 as principal
+  tft.setCursor(0,0);
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_WHITE);
+  tft.print(F("THD+N = ")); tft.print(thdx10/10); tft.print('.'); tft.print(thdx10%10); tft.print('%');
+  tp.z = 0;
+  while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+    readResistiveTouch();
 }
 
 void datapixel(int index, int color)
@@ -602,6 +660,7 @@ void mappoints( TSPoint* tp )
   x = map(p.x, LEFT=181, RT=918, 0, 240)
   y = map(p.y, TOP=938, BOT=184, 0, 320)*/
 
+/*
   if( MINPRESSURE < tp->z && MAXPRESSURE>tp->z )
   {
     Serial.print("tp.x = ");
@@ -610,7 +669,7 @@ void mappoints( TSPoint* tp )
     Serial.print(tp->y);
     Serial.print(", tp.z = ");
     Serial.println(tp->z);
-  }
+  }*/
 }
 
 void mainMenu()
@@ -621,15 +680,15 @@ void mainMenu()
   tft.fillRect(0,0, SCREENWIDTH/2, SCREENHEIGHT/2, COLOR_RED);
   tft.setCursor(30,SCREENHEIGHT/6);
   tft.setTextColor(COLOR_WHITE);
-  tft.print("SCOPE");
+  tft.print(F("SCOPE"));
   tft.fillRect(SCREENWIDTH/2,0, SCREENWIDTH/2, SCREENHEIGHT/2, COLOR_GREEN);
   tft.setCursor(SCREENWIDTH/2+30,SCREENHEIGHT/6);
   tft.setTextColor(COLOR_BLACK);
-  tft.print("METER");
+  tft.print(F("METER"));
   tft.fillRect(0,SCREENHEIGHT/2, SCREENWIDTH/2, SCREENHEIGHT/2, COLOR_BLUE);
   tft.setCursor(30,SCREENHEIGHT/2+SCREENHEIGHT/6);
   tft.setTextColor(COLOR_WHITE);
-  tft.print("LOGIC");
+  tft.print(F("LOGIC"));
   tft.fillRect(SCREENWIDTH/2,SCREENHEIGHT/2, SCREENWIDTH/2, SCREENHEIGHT/2, COLOR_BLACK);
   /*tft.setCursor(SCREENWIDTH/2+20, SCREENEIGHT/2+SCREENHEIGHT/6);
   tft.print("Future?");*/
@@ -875,7 +934,7 @@ void scopeMode()
               break;
             case SCROLL:
               verticalmidpoint = verticalmidpoint + MySettings.uVperdiv/(COARSEADJUST==leftfunc?1:5);
-              Serial.print("verticalmidpoint = "); Serial.println(verticalmidpoint);
+              Serial.print(F("verticalmidpoint = ")); Serial.println(verticalmidpoint);
               plotanalogdata();
               plotVertScale();
               break;
@@ -922,7 +981,7 @@ void scopeMode()
               break;
             case SCROLL:
               verticalmidpoint = verticalmidpoint - MySettings.uVperdiv/(COARSEADJUST==leftfunc?1:5);
-              Serial.print("verticalmidpoint = "); Serial.println(verticalmidpoint);
+              //Serial.print(F("verticalmidpoint = ")); Serial.println(verticalmidpoint);
               plotanalogdata();
               plotVertScale();
               break;
@@ -1099,12 +1158,13 @@ void logicMode()
           delay(100);
           if(freeze);
             break;
+            /*
           if(!freeze && 9==i)
           {
             //tft.setCursor(160,220); // tft may not like me writing to it while ADC is in girino mode
             //tft.println("hung up");
             Serial.print("hung up");
-          }
+          }*/
         }
         //while(!freeze)
         //  delay(100);
@@ -1316,7 +1376,7 @@ void saveBufferToSd()
     tft.setCursor(1,10);
     tft.setTextSize(2);
     tft.setTextColor(COLOR_WHITE);
-    tft.print("Unable to open SD card!");
+    tft.print(F("Unable to open SD card!"));
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
       readResistiveTouch();
@@ -1337,13 +1397,13 @@ void saveBufferToSd()
   File myFile = SD.open(str, FILE_WRITE);
   if (myFile)
   {
-    myFile.println("% Ranocchio scopemeter output file");
+    myFile.println(F("% Ranocchio scopemeter output file"));
     myFile.println("");
-    myFile.print("timestep_ns = "); myFile.print(dtbuffered_ns); myFile.println(";");
+    myFile.print(F("timestep_ns = ")); myFile.print(dtbuffered_ns); myFile.println(";");
     myFile.println("");
-    myFile.print("microvolts_per_count = "); myFile.print(vresbuffered_uV); myFile.println(";");
+    myFile.print(F("microvolts_per_count = ")); myFile.print(vresbuffered_uV); myFile.println(";");
     myFile.println("");
-    myFile.println("Data = [");
+    myFile.println(F("Data = ["));
     myFile.print(ADCBuffer[ADCCounter]);
     for(int i=0; i<ADCBUFFERSIZE; i++)
     {
@@ -1358,7 +1418,7 @@ void saveBufferToSd()
     tft.setCursor(1,10);
     tft.setTextSize(2);
     tft.setTextColor(COLOR_WHITE);
-    tft.print("Unable to write to file!");
+    tft.print(F("Unable to write to file!"));
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
       readResistiveTouch();
@@ -1378,7 +1438,7 @@ void saveScreenshotToSd()
     tft.setCursor(1,10);
     tft.setTextSize(2);
     tft.setTextColor(COLOR_WHITE);
-    tft.print("Unable to open SD card!");
+    tft.print(F("Unable to open SD card!"));
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
       readResistiveTouch();
@@ -1426,7 +1486,7 @@ void saveScreenshotToSd()
     tft.setCursor(1,10);
     tft.setTextSize(2);
     tft.setTextColor(COLOR_WHITE);
-    tft.print("Unable to write file!");
+    tft.print(F("Unable to write file!"));
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
       readResistiveTouch();
@@ -1552,5 +1612,5 @@ void triggerInterrupt()
   // https://forum.arduino.cc/t/interrupt-runs-after-flag-cleared/685526/13
   cbi(EIMSK,INT3);
   stopIndex = (ADCCounter + waitDuration)%ADCBUFFERSIZE;
-  Serial.println("TRIGGER");
+  Serial.println(F("TRIGGER"));
 }

@@ -31,6 +31,7 @@
 #include <util/delay.h>
 #include "Girino.h"
 #include "touchkbd.h"
+#include "fix_fft.h"
 #include <SD.h>
 //define TouchScreen TouchScreen_kbv
 //define TSPoint TSPoint_kbv;
@@ -189,6 +190,7 @@ void mainMenu();
 void meterMode();
 void scopeMode();
 void logicMode();
+void fftsubmode();
 
 void triggerInterrupt();
 
