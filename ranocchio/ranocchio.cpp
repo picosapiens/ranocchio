@@ -556,16 +556,25 @@ void scopeSettings()
   }
 }
 
+/*
+int powerToMilliDB(int num)
+{
+  return 20000*log10(sqrt((float)num));
+}*/
+
 void fftsubmode()
 {
   tft.fillScreen(COLOR_BLACK);
   
   // Resample to 256 points
   #define FFTSIZE 256
+  uint8_t fundindex = 2;
   int8_t data[FFTSIZE], im[FFTSIZE];
   int d = rightmostindex - scrollindex;
+  float fsam = 1000000000.0/((float)d*dtbuffered_ns/FFTSIZE);
   int n;
   long int mysum = 0;
+  bool returntomain = false;
   //Serial.println(F("Downsample:"));
   //Serial.print(F("d = "));Serial.println(d);
   for(int i=0;i<FFTSIZE;i++)
@@ -584,29 +593,65 @@ void fftsubmode()
   fix_fft(data, im, 8, 0);
   
   int* pwr = (int*)(&(data[0]));
-  mysum = 0;
+
   for(int i=0; i<FFTSIZE/2; i++)
-  {
     pwr[(i+FFTSIZE/4)%(FFTSIZE/2)] = (int)data[i]*data[i] + (int)im[i]*im[i];
-    if(i > 2)
-      mysum += pwr[(i+FFTSIZE/4)%(FFTSIZE/2)];
-    //Serial.println(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)]);
-  }
-  
+
   for(int i=1; i<FFTSIZE/2; i++)
-  {
-    tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - map(pwr[(i-1+FFTSIZE/4)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT),map(i,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - map(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT),COLOR_GREENYELLOW);
-    //tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH), SCREENHEIGHT/2-data[i-1], map(i,0,FFTSIZE/2,0,SCREENWIDTH), SCREENHEIGHT/2-data[i], COLOR_GREENYELLOW);
-  }
+    {
+      // TODO: Would it be better to plot sqrt(pwr), possibly converted to dB?
+      tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - 25 - map(pwr[(i-1+FFTSIZE/4)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT-25),map(i,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT -25 - map(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT-25),COLOR_GREENYELLOW);
+      //tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - 25 - map(powerToMilliDB(pwr[(i-1+FFTSIZE/4)%(FFTSIZE/2)]),-60000,60000,0,SCREENHEIGHT-25),map(i,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT -25 - map(powerToMilliDB(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)]),-60000,60000,0,SCREENHEIGHT-25),COLOR_GREENYELLOW);
+    }
+  
   //Serial.print("mysum = "); Serial.print(mysum); Serial.print(", principal = ");Serial.println(pwr[(2+FFTSIZE/4)%(FFTSIZE/2)] );
-  int thdx10 = (int)sqrt( 1000000*mysum / pwr[(2+FFTSIZE/4)%(FFTSIZE/2)] ); // TODO: allow referencing other than i=2 as principal
-  tft.setCursor(0,0);
-  tft.setTextSize(2);
-  tft.setTextColor(COLOR_WHITE);
-  tft.print(F("THD+N = ")); tft.print(thdx10/10); tft.print('.'); tft.print(thdx10%10); tft.print('%');
-  tp.z = 0;
-  while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
-    readResistiveTouch();
+  int thdx10;
+  pixelsx = map(fundindex,0,FFTSIZE-1,0,SCREENWIDTH);
+  tft.readGRAM( pixelsx, 0, pixels, 1, SCREENHEIGHT-25);
+  while(!returntomain)
+  {
+    mysum = 0;
+    for(int i=0; i<FFTSIZE/2; i++)
+    {
+      if(i > fundindex)
+        mysum += pwr[(i+FFTSIZE/4)%(FFTSIZE/2)];
+      //Serial.println(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)]);
+    }
+
+    tft.setAddrWindow( pixelsx, 0, pixelsx, SCREENHEIGHT-25 );
+    tft.pushColors(pixels, SCREENHEIGHT-25, true);
+    tft.setAddrWindow(0, 0, tft.width() - 1, tft.height() - 1);
+    pixelsx = map(fundindex,0,FFTSIZE-1,0,SCREENWIDTH);
+    tft.readGRAM( pixelsx, 0, pixels, 1, SCREENHEIGHT-25);
+    tft.drawFastVLine( pixelsx,0,SCREENHEIGHT-25,COLOR_RED);
+
+    thdx10 = (int)sqrt( 1000000*mysum / pwr[(fundindex+FFTSIZE/4)%(FFTSIZE/2)] );
+    tft.fillRect(0,SCREENHEIGHT-24,SCREENWIDTH,SCREENHEIGHT,COLOR_BLACK);
+    tft.setCursor(0,SCREENHEIGHT-23);
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_WHITE);
+    tft.print(F("FUND ")); tft.print(fundindex*fsam/FFTSIZE); //tft.print('.'); tft.print((fundindex*fsamx10)%10);
+    tft.print(F("Hz:THD+N=")); tft.print(thdx10/10); tft.print('.'); tft.print(thdx10%10); tft.print('%');
+    returntomain = false;
+    
+    tp.z = 0;
+    while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+      readResistiveTouch();
+    if( tp.y < SCREENHEIGHT-25 ) // *** TOP PART ***
+    {
+      if( tp.x < SCREENWIDTH/2 ) // Left side
+      {
+        //if(fundindex>0) // Just let it wrap around
+          fundindex--;
+      } else { // Right side
+        //if(255>fundindex) // Just let it wrap around
+          fundindex++;
+      }
+    } else {                     // *** BOTTOM PART ***
+      returntomain = true;
+    }
+    delay(200);
+  }
 }
 
 void datapixel(int index, int color)
