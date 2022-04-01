@@ -23,6 +23,9 @@
 #include "ranocchio.h"
 
 volatile RanocchioSettings MySettings;
+#warning I dont think this needs to be volatile - not changed in interrupt
+
+volatile bool redrawinfo=false;
 
 uint8_t vcoarseindex;
 uint8_t vfineadjust;
@@ -319,7 +322,9 @@ void plotInformation()
   tft.setTextSize(1);
   
   tft.setCursor(0,SCREENHEIGHT-10);
-  tft.print(F("[RUN]"));
+  tft.print(F("[RUN "));
+  tft.print(MySettings.currentrange_mV/1000);
+  tft.print(F("Vmax]"));
 
   tft.setCursor(SCREENWIDTH/2-20,SCREENHEIGHT-10);
   tft.print(F("[SETTINGS]"));
@@ -830,7 +835,16 @@ void scopeMode()
   {
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+    {
+      if(redrawinfo)
+      {
+        delay(10);
+        updateCurrentRange();
+        plotInformation();
+        redrawinfo=false;
+      }
       readResistiveTouch();
+    }
   
     if( (PLOTTERX+PLOTTERW/3) > tp.x )                                                   // ******LEFT THIRD******
     {
@@ -885,21 +899,23 @@ void scopeMode()
       } else if ( PLOTTERY+PLOTTERH < tp.y) { // Very bottom of screen
         //Serial.println("Running scope...");
         memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
+        vresbuffered_uV = MySettings.currentrange_mV*1000/128;
         /*triplesum = 0;
         tripletrig = 3*triggerlevel;*/
         sei();
         initPins();
         initADC();
         delay(10);
-        //ADCCounter=0;
+        ADCCounter=0;
         startADC();
+        wait = true; freeze=false;
         //delay(10); // Takes a little while to get going?
-        switch(triggertype)
-        {
-          case NOTRIGGER:
-            stopIndex = ( ADCCounter + ADCCounter-1 ) % ADCBUFFERSIZE; // fill the whole buffer
-            break;
-          case RISINGEDGE:
+        //switch(triggertype)
+        //{
+          //case NOTRIGGER:
+            stopIndex = ( ADCCounter + ADCBUFFERSIZE ) % ADCBUFFERSIZE; // fill the whole buffer
+           // break;
+        /*  case RISINGEDGE:
             stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
             attachInterrupt(digitalPinToInterrupt(18),triggerInterrupt,RISING);
             break;
@@ -911,8 +927,8 @@ void scopeMode()
             stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
             attachInterrupt(digitalPinToInterrupt(18),triggerInterrupt,CHANGE);
             break;
-        }
-        wait = true; freeze=false;
+        }*/
+        
         
         /*Serial.print("stopIndex: ");
         Serial.print(stopIndex);
@@ -1429,20 +1445,24 @@ void saveBufferToSd()
   }
 
   // Get file name
-  char str[11];
+  char str[26]; // only need size 11 here but will reuse the array below
   str[0] = '\0';
-  int i = touchkeyinput(str, 8, "Enter file name");
+  int i = touchkeyinput(str, 8, "Enter file name (empty to cancel)");
   if(0==i)
     return; // Don't proceed without at least one character in the file name
   str[i] = '.';
   str[i+1] = 'm';
   str[i+2] = '\0';
-  
 
   File myFile = SD.open(str, FILE_WRITE);
   if (myFile)
   {
+    str[0] = '\0';
+    i = touchkeyinput(str, 25, "Enter notes");
+    
     myFile.println(F("% Ranocchio scopemeter output file"));
+    myFile.println("");
+    myFile.println(str); // Notes
     myFile.println("");
     myFile.print(F("timestep_ns = ")); myFile.print(dtbuffered_ns); myFile.println(";");
     myFile.println("");
@@ -1450,7 +1470,7 @@ void saveBufferToSd()
     myFile.println("");
     myFile.println(F("Data = ["));
     myFile.print(ADCBuffer[ADCCounter]);
-    for(int i=0; i<ADCBUFFERSIZE; i++)
+    for(int i=1; i<ADCBUFFERSIZE; i++)
     {
       myFile.print(',');
       myFile.print(ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]);
@@ -1589,6 +1609,7 @@ void analyzeData(bool adjustwindow) // Analyze the portion of the data between s
   uint32_t firstpcrossingx10;
   uint32_t lastpcrossingx10;
   uint32_t lastncrossing;
+  int thirdpcrossing=0;
   uint32_t foundpcrossings=0;
   uint32_t foundncrossings=0;
   uint32_t totalhightime=0;
@@ -1617,6 +1638,10 @@ void analyzeData(bool adjustwindow) // Analyze the portion of the data between s
           firstpcrossingx10 = 10*i + (10*(3*swingline - sum3(i))) / ( sum3(i+1) - sum3(i) );
           lastpcrossingx10 = firstpcrossingx10;
         } else {
+          if(2==foundpcrossings)
+          {
+            thirdpcrossing = i;
+          }
           lastpcrossingx10 = 10*i + (10*(3*swingline - sum3(i))) / ( sum3(i+1) - sum3(i) );
         }
         foundpcrossings++;
@@ -1639,17 +1664,17 @@ void analyzeData(bool adjustwindow) // Analyze the portion of the data between s
   #warning frequency count is not working
   datadutycyclex1000 = 1000*(10*totalhightime-(searchpositive?lastncrossing*10-lastpcrossingx10:0))/(lastpcrossingx10-firstpcrossingx10);
 
- if(adjustwindow && foundncrossings)
+ if(adjustwindow && (2<foundpcrossings))
  {
     scrollindex = firstpcrossingx10/10;
-    MySettings.usperdiv = (2*dtbuffered_ns*lastncrossing/foundncrossings - scrollindex)/6000 + 1;
+    MySettings.usperdiv = (dtbuffered_ns*(thirdpcrossing-scrollindex)+1)/6000;
     
-    #warning need to scale vertical axis and (once we have a vertical scroll) vertical position
-    verticalmidpoint = swingline*vresbuffered_uV;
+    verticalmidpoint = ((int)swingline-128)*vresbuffered_uV;
+    MySettings.uVperdiv = (datamax-datamin+2)*vresbuffered_uV/4;
  }
 }
 
-
+/*
 void triggerInterrupt()
 {
   // Note that the attachinterrupt function and the atmega chip itself have different conventions for numbering the interrupts.
@@ -1658,4 +1683,32 @@ void triggerInterrupt()
   cbi(EIMSK,INT3);
   stopIndex = (ADCCounter + waitDuration)%ADCBUFFERSIZE;
   Serial.println(F("TRIGGER"));
+}*/
+
+void rangeToggled()
+{
+  // If data collection is running, stop it
+  cbi( ADCSRA, ADEN );
+  freeze = true;
+  wait = false;
+  redrawinfo = true;
+}
+
+void updateCurrentRange()
+{
+  switch(PIND&B11) // Port D is pins 18,19,20,21 so get the bottom two bits
+  {
+    case B11:
+      MySettings.currentrange_mV = 220590;
+      break;
+    case B01:
+      MySettings.currentrange_mV = 70527;
+      break;
+    case B10:
+      MySettings.currentrange_mV = 32819;
+      break;
+    case B00:
+      MySettings.currentrange_mV = 10493;
+      break;
+  }
 }

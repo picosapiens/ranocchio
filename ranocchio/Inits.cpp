@@ -113,9 +113,9 @@ void initPins(void)
 	sbi(TCCR2B,CS20);
 
 	pinMode( errorPin, OUTPUT );
-	pinMode( thresholdPin, OUTPUT );
+//	pinMode( thresholdPin, OUTPUT );
 
-	analogWrite( thresholdPin, 127 );
+//	analogWrite( thresholdPin, 127 );
 }
   
 //-----------------------------------------------------------------------------

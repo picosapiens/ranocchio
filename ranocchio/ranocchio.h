@@ -68,8 +68,12 @@ extern int YP;
 extern int XM;
 extern int YM;
 
+void updateCurrentRange();
+
 extern TouchScreen ts;
 extern TSPoint tp;
+
+extern volatile bool redrawinfo;
 
 extern bool SDready;
 
@@ -157,6 +161,7 @@ typedef struct {
   uint32_t usperdiv;
   uint8_t ADCprescaler;
   bool displayrms;
+  uint32_t currentrange_mV;
 } RanocchioSettings;
 
 extern volatile int16_t scrollindex;
@@ -193,6 +198,7 @@ void logicMode();
 void fftsubmode();
 
 void triggerInterrupt();
+void rangeToggled();
 
 void saveBufferToSd();
 void saveScreenshotToSd();

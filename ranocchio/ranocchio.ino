@@ -136,6 +136,14 @@ void setup() {
   analogWrite(46,128); // For the negative charge pump
   pinMode(45,OUTPUT);
   analogWrite(45,128); // For the positive charge pump
+
+  // Digital interrupts - https://www.instructables.com/External-Interrupt-in-arduino/
+  // Call the rangeToggled function if either of the pins changes
+  pinMode(21,INPUT_PULLUP);
+  attachInterrupt(2,rangeToggled,CHANGE);
+  pinMode(20,INPUT_PULLUP);
+  attachInterrupt(3,rangeToggled,CHANGE);
+  updateCurrentRange();
  
   vcoarseindex = 3;
   vfineadjust = 0;

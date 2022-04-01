@@ -32,9 +32,9 @@
 
 #define ADCBUFFERSIZE	3000
 
-#define ADCPIN		15
+#define ADCPIN		7
 #define errorPin	51
-#define thresholdPin	53
+//define thresholdPin	53
 
 #define BAUDRATE	115200	// Baud rate of UART in bps
 #define COMMANDDELAY	10	// ms to wait for the filling of Serial buffer
