@@ -135,6 +135,7 @@ extern uint8_t rightfunc;
 #define NUMRFUNCS 4
 
 extern uint8_t triggerstatus;
+extern uint16_t triggerindex;
 
 extern uint8_t triggertype;
 #define RISINGEDGE 0

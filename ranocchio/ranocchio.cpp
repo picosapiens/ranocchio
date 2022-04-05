@@ -33,8 +33,10 @@ uint8_t vpower;
 
 uint8_t triggermode=0;
 uint8_t triggerlevel;
+uint16_t triggerindex;
 uint8_t triggerstatus;
 uint16_t tripletrig;
+#warning unused variables
 uint16_t triplesum;
 
 
@@ -125,7 +127,7 @@ void plotVertScale()
   
   
   tft.fillRect(0,PLOTTERY, SCREENWIDTH-PLOTTERW, PLOTTERH+1, COLOR_BLACK);
-  if(NOTRIGGER != triggermode)
+  if(NOTRIGGER != triggertype)
   {
     tft.drawFastHLine(0,PLOTTERY + PLOTTERH - counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERX,COLOR_BLUE);
   }
@@ -290,7 +292,13 @@ void plotHorizScale()
   tft.fillRect(0,PLOTTERY+PLOTTERH+1, SCREENWIDTH, 15, COLOR_BLACK);
   tft.setTextSize(1);
   tft.setTextColor(COLOR_WHITE);
-  
+
+  // Show trigger time, if applicable
+  if( triggerindex > ADCCounter )
+    tft.drawFastVLine(PLOTTERX+index_to_hpixels(scrollindex,triggerindex-ADCCounter),PLOTTERY+PLOTTERH+1,7,COLOR_RED);
+  else
+    tft.drawFastVLine(PLOTTERX+index_to_hpixels(scrollindex,(ADCBUFFERSIZE+triggerindex-ADCCounter)%ADCBUFFERSIZE),PLOTTERY+PLOTTERH+1,7,COLOR_RED);
+   
   // Leftmost label
   long int number = scrollindex*dtbuffered_ns;
   char value[8], sign_units[8];
@@ -324,7 +332,8 @@ void plotInformation()
   tft.setCursor(0,SCREENHEIGHT-10);
   tft.print(F("[RUN "));
   tft.print(MySettings.currentrange_mV/1000);
-  tft.print(F("Vmax]"));
+  tft.print(F(" Vp]"));
+  //tft.print(tp.z);                                                                             
 
   tft.setCursor(SCREENWIDTH/2-20,SCREENHEIGHT-10);
   tft.print(F("[SETTINGS]"));
@@ -492,7 +501,10 @@ int index_to_hpixels( int start, int i )
 int counts_to_vpixels( long int midpt, int i)
 {
   //Serial.print("counts_to_vpixels called with midpoint = "); Serial.println(midpt);
-  return map(((long int)i-128)*vresbuffered_uV,midpt-((int32_t)PLOTTERH / YDIVPIXELS)*MySettings.uVperdiv/2,  midpt+((int32_t)PLOTTERH / YDIVPIXELS)*MySettings.uVperdiv/2, 0, PLOTTERH);
+  if(  100000 > vresbuffered_uV ) // do the math in microvolts
+    return map(((long int)i-128)*vresbuffered_uV,midpt-((int32_t)PLOTTERH / YDIVPIXELS)*MySettings.uVperdiv/2,  midpt+((int32_t)PLOTTERH / YDIVPIXELS)*MySettings.uVperdiv/2, 0, PLOTTERH);
+  else // do the math in millivolts
+    return map(((long int)i-128)*(vresbuffered_uV/1000),midpt/1000-((int32_t)PLOTTERH / YDIVPIXELS)*(MySettings.uVperdiv/2000),  midpt/1000+((int32_t)PLOTTERH / YDIVPIXELS)*(MySettings.uVperdiv/2000), 0, PLOTTERH);
 }
 
 void scopeSettings()
@@ -521,13 +533,13 @@ void scopeSettings()
       tft.print("P-P");
   
     tft.setCursor(5,5+SCREENHEIGHT/3);
-    tft.print("Auto Scale");
+    tft.print(F("Auto Scale"));
 
     tft.setCursor(5+SCREENWIDTH/2,5+SCREENHEIGHT/3);
-    tft.print("Save to SD");
+    tft.print(F("Save to SD"));
 
     tft.setCursor(5, 5 + 2*SCREENHEIGHT/3);
-    tft.print("Save Screenshot");
+    tft.print(F("Save\nScreenshot"));
 
     tft.setCursor(5 + SCREENWIDTH/2, 5 + 2*SCREENHEIGHT/3);
     tft.print("FFT");
@@ -540,21 +552,28 @@ void scopeSettings()
     {
       if( tp.y < SCREENHEIGHT/3 ) // Top
       {
+        // Return
         returntomain = true;
       } else if (tp.y < 2*SCREENHEIGHT/3) { // Middle
+        // Auto scale
         scrollindex = 0;
         rightmostindex = waitDuration;
         analyzeData(true);
+        returntomain = true;
       } else { // Bottom
+        // Save screenshot
         saveScreenshotToSd();
       }
     } else { //                   *** Right column ***
       if( tp.y < SCREENHEIGHT/3 ) // Top
       {
+        // Toggle between RMS and P-P voltage display in the info bar
         MySettings.displayrms = !(MySettings.displayrms);
       } else if ( tp.y < 2*SCREENHEIGHT/3) { // Middle
+        // Save data to SD Card
         saveBufferToSd();
       } else {
+        // Frequency analysis
         fftsubmode();
       }
     }
@@ -671,7 +690,7 @@ void datapixel(int index, int color)
 void readResistiveTouch(void)
 {
     tp = ts.getPoint();
-    /*if( MINPRESSURE < tp.z && MAXPRESSURE>tp.z )
+   /* if( MINPRESSURE < tp.z && MAXPRESSURE>tp.z )
   {
     Serial.print("tp.x = ");
     Serial.print(tp.x);
@@ -684,6 +703,13 @@ void readResistiveTouch(void)
     mappoints(&tp);
     pinMode(YP, OUTPUT);      //restore shared pins
     pinMode(XM, OUTPUT);
+
+    // https://forum.arduino.cc/t/touchscreen-and-tft-sharing-uno-pins-help-needed/218910/3
+    /*pinMode(XM, OUTPUT);
+    digitalWrite(XM, LOW);
+    pinMode(YP, OUTPUT);
+    digitalWrite(YP, HIGH);*/
+
     //digitalWrite(YP, HIGH);  //because TFT control pins
     //digitalWrite(XM, HIGH);
     //    Serial.println("tp.x=" + String(tp.x) + ", tp.y=" + String(tp.y) + ", tp.z =" + String(tp.z));
@@ -833,15 +859,17 @@ void scopeMode()
   
   while(!returntomain)
   {
+    //deinitADC(); // SHOULDN'T BE NECESSARY??
+    //delay(10);
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
     {
       if(redrawinfo)
       {
-        delay(10);
+        //delay(10);
+        redrawinfo=false;
         updateCurrentRange();
         plotInformation();
-        redrawinfo=false;
       }
       readResistiveTouch();
     }
@@ -894,68 +922,117 @@ void scopeMode()
             delay(100);
             break;
         }
-        //Serial.print("usperdiv = ");
-        //Serial.println(MySettings.usperdiv);
       } else if ( PLOTTERY+PLOTTERH < tp.y) { // Very bottom of screen
-        //Serial.println("Running scope...");
-        memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
-        vresbuffered_uV = MySettings.currentrange_mV*1000/128;
-        /*triplesum = 0;
-        tripletrig = 3*triggerlevel;*/
-        sei();
-        initPins();
-        initADC();
-        delay(10);
-        ADCCounter=0;
-        startADC();
-        wait = true; freeze=false;
-        //delay(10); // Takes a little while to get going?
-        //switch(triggertype)
-        //{
-          //case NOTRIGGER:
-            stopIndex = ( ADCCounter + ADCBUFFERSIZE ) % ADCBUFFERSIZE; // fill the whole buffer
-           // break;
-        /*  case RISINGEDGE:
-            stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
-            attachInterrupt(digitalPinToInterrupt(18),triggerInterrupt,RISING);
-            break;
-          case FALLINGEDGE:
-            stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
-            attachInterrupt(digitalPinToInterrupt(18),triggerInterrupt,FALLING);
-            break;
-          case ANYEDGE:
-            stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
-            attachInterrupt(digitalPinToInterrupt(18),triggerInterrupt,CHANGE);
-            break;
-        }*/
-        
-        
-        /*Serial.print("stopIndex: ");
-        Serial.print(stopIndex);
-        Serial.print("\n");*/
-        
-        /*for(int i=0;i<10;i++)
+        tft.fillRect(0,PLOTTERY+PLOTTERH+1,SCREENWIDTH,SCREENHEIGHT-PLOTTERY-PLOTTERH,COLOR_BLACK);
+        tft.setCursor(10,PLOTTERY+PLOTTERH+2);
+        tft.setTextSize(2);
+        tft.print(F("Running..."));
+        tft.setCursor(0,SCREENHEIGHT-10); tft.setTextSize(1);
+        if( SINGLE == triggermode )
+          tft.print(F("[Change range to abort]"));
+        else
+          tft.print(F("[Long press to stop; Change range to abort]"));
+        do
         {
-          delay(100);
-          if(freeze);
-            break;
-          if(!freeze && 9==i)
+          memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
+          vresbuffered_uV = MySettings.currentrange_mV*1000/128;
+          /*triplesum = 0;
+          tripletrig = 3*triggerlevel;*/
+          sei();
+          initPins();
+          initADC();
+          delay(10);
+          ADCCounter=0;
+          
+          triggerindex = ADCBUFFERSIZE+1; // invalid value until we get a trigger
+          
+          int myindex=ADCBUFFERSIZE-waitDuration;
+          //uint8_t laststate = 3;
+          bool currentstate;
+          bool armwhen,triggerwhen;
+          uint8_t trigger;
+          bool once = true;
+          if(NOTRIGGER == triggertype)
           {
-            //tft.setCursor(160,220); // tft may not like me writing to it while ADC is in girino mode
-            //tft.println("hung up");
-            Serial.print("hung up");
+            trigger = 2; // triggered
+            stopIndex = ADCCounter; // fill the whole buffer
+          } else {
+            trigger = 0; // initializing
+            stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
           }
-        }*/
-        while(!freeze)
-          delay(100);
-        #warning Need to implement stop button so we can't get stuck waiting forever for trigger
-        #warning Should write an indicator to the screen to show measurement is running
-        deinitADC();
-        scrollindex = 0;
-        plotanalogdata();
+          startADC();
+          wait = true; freeze=false;
+          while(ADCCounter<=myindex) // We start looking at trigger late so that waitDuration can't make us stop before the entire buffer contains valid data
+            delayMicroseconds(1);
+          currentstate = (ADCBuffer[myindex]>=triggerlevel);
+          //Serial.print("Initial trigger-relative state "); Serial.println(currentstate);
+          switch(triggertype)
+          {
+            case RISINGEDGE:
+              armwhen = false;
+              triggerwhen = true;
+              break;
+            case FALLINGEDGE:
+              armwhen = true;
+              triggerwhen = false;
+              break;
+            case ANYEDGE:
+              armwhen = currentstate;
+              triggerwhen = !currentstate;
+              break;
+          }
+          while(!freeze)
+          {
+            while( myindex != (ADCCounter + ADCBUFFERSIZE - 1)%ADCBUFFERSIZE )
+            {
+              //laststate = currentstate;
+              currentstate = (ADCBuffer[myindex]>=triggerlevel);
+              switch(trigger)
+              {
+                case 0: // waiting
+                  if(currentstate == armwhen)
+                  {
+                    trigger++;
+                    //Serial.print("Arm index"); Serial.print(myindex); Serial.print(", state "); Serial.print(currentstate); Serial.print(", armwhen "); Serial.println(armwhen);
+                  }
+                  break;
+                case 1: // armed
+                  if(currentstate == triggerwhen)
+                  {
+                    trigger++;
+                    //Serial.print("Trigger index "); Serial.print(myindex); Serial.print(", state "); Serial.print(currentstate); Serial.print(", triggerhwen "); Serial.println(triggerwhen);
+                  }
+                  break;
+                case 2: // triggered
+                  triggerindex = myindex;
+                  stopIndex = ( myindex + waitDuration ) % ADCBUFFERSIZE;
+                  trigger++;
+                  break;
+              }
+              myindex = (myindex+1)%ADCBUFFERSIZE;
+            }
+          }
+          #warning Should write an indicator to the screen to show measurement is running
+          delay(10);
+          deinitADC();
+          scrollindex = 0;
+          plotanalogdata();
+          
+          tp.z = 0;
+          readResistiveTouch();
+          if( MINPRESSURE<tp.z && MAXPRESSURE>tp.z)
+          {
+            tft.fillRect(0,PLOTTERY+PLOTTERH+1,SCREENWIDTH,SCREENHEIGHT-PLOTTERY-PLOTTERH,COLOR_BLACK);
+            tft.setCursor(50,PLOTTERY+PLOTTERH+5);
+            tft.setTextSize(2);
+            tft.print(F("STOP"));
+            delay(300);
+            break;
+          }
+          delay(1000);
+        } while( SINGLE != triggermode );
+        plotHorizScale();
         plotInformation();
-        //tft.begin(ID);
-        //tft.setRotation(1); // Landscape
         }
       } else if ( (PLOTTERX + PLOTTERW/3 < tp.x) && ( PLOTTERX + 2*PLOTTERW/3 > tp.x) ) { // ******MIDDLE THIRD******
         //Serial.println("Touch in the middle third...");
@@ -1060,6 +1137,7 @@ void scopeMode()
           plotanalogdata();
           plotStatusBar();
           plotVertScale();
+          plotHorizScale();
           plotInformation();
         }
         //Serial.println("Undefined touch in the middle third");
@@ -1209,7 +1287,6 @@ void logicMode()
         //ADCCounter=0;
         startADC();
         delay(10); // Takes a little while to get going?
-        stopIndex = ( ADCCounter + waitDuration ) % ADCBUFFERSIZE;
         /*Serial.print("stopIndex: ");
         Serial.print(stopIndex);
         Serial.print("\n");*/
@@ -1688,15 +1765,19 @@ void triggerInterrupt()
 void rangeToggled()
 {
   // If data collection is running, stop it
-  cbi( ADCSRA, ADEN );
-  freeze = true;
-  wait = false;
+  //if(wait)
+  //{
+    //cbi( ADCSRA, ADEN );
+    freeze = true;
+  //}
+  //wait = false;
   redrawinfo = true;
 }
 
 void updateCurrentRange()
 {
   switch(PIND&B11) // Port D is pins 18,19,20,21 so get the bottom two bits
+  //switch( digitalRead(20)<<1 | digitalRead(21) )
   {
     case B11:
       MySettings.currentrange_mV = 220590;

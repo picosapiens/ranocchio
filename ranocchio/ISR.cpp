@@ -35,8 +35,6 @@ ISR(ADC_vect)
 	// than 8-bit precision is required, it is sufficient to read ADCH.
 	// Otherwise, ADCL must be read first, then ADCH.
 	ADCBuffer[ADCCounter] = ADCH;
-  //triplesum = triplesum - ADCBuffer[(ADCCounter+ADCBUFFERSIZE-2)%ADCBUFFERSIZE] + ADCBuffer[ADCCounter];
-  //TODO Figure out how to not act on this until we actually have three valid points
 /*
   switch(triggerstatus)
   {
@@ -65,7 +63,7 @@ ISR(ADC_vect)
 		{
 			// Freeze situation
 			// Disable ADC and stop Free Running Conversion Mode
-			cbi( ADCSRA, ADEN );
+			cbi( ADCSRA, ADEN ); // If you leave it like this, though, you won't be able to use the touchscreen - that's what deinitADC is for, to set it back to ordinary operation
 
 			freeze = true;
 		}

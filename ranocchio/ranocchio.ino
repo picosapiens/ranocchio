@@ -23,7 +23,7 @@
 
 #include "ranocchio.h"
 //include "TouchScreen_kbv.h"
-#include "TouchScreen.h"
+//include "TouchScreen.h"
 #include "touchkbd.h"
 //include <SoftwareSerial.h>
 
@@ -97,7 +97,7 @@ void printDirectory(File dir, int numTabs) {
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(9600);
+  Serial.begin(115200);
   ID = tft.readID(); //
   Serial.print("ID = 0x");
   Serial.println(ID, HEX);
@@ -110,7 +110,7 @@ void setup() {
  //memset( (void *)commandBuffer, 0, sizeof(commandBuffer) );
   ADCCounter = 0;
   wait = false;
-  waitDuration = ADCBUFFERSIZE-1; // Subtract a small amount of pretrigger time if desired, but see bug report
+  waitDuration = ADCBUFFERSIZE-100; // Subtract a small amount of pretrigger time if desired
   stopIndex = -1;
   freeze = false;
 
@@ -140,17 +140,18 @@ void setup() {
   // Digital interrupts - https://www.instructables.com/External-Interrupt-in-arduino/
   // Call the rangeToggled function if either of the pins changes
   pinMode(21,INPUT_PULLUP);
-  attachInterrupt(2,rangeToggled,CHANGE);
+  attachInterrupt(digitalPinToInterrupt(21),rangeToggled,CHANGE);
   pinMode(20,INPUT_PULLUP);
-  attachInterrupt(3,rangeToggled,CHANGE);
+  attachInterrupt(digitalPinToInterrupt(20),rangeToggled,CHANGE);
   updateCurrentRange();
+  #warning I do not know why readResistiveTouch stops working after these interrupts fire in scope mode with data on the screen
  
   vcoarseindex = 3;
   vfineadjust = 0;
   vpower = 5;
   triggerlevel = 160;
-  pinMode(44,OUTPUT);
-  analogWrite(44,triggerlevel);
+  //pinMode(44,OUTPUT);
+  //analogWrite(44,triggerlevel);
   MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
   MySettings.usperdiv = 2000;
   MySettings.ADCprescaler = 8;
@@ -160,7 +161,8 @@ void setup() {
   rightfunc = SCALE;
   leftfunc = COARSEADJUST;
   triggertype = RISINGEDGE;
-  pinMode(18,INPUT);
+  triggermode = SINGLE;
+  //pinMode(18,INPUT);
   SDready = false;
 }
 
