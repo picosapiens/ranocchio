@@ -202,7 +202,7 @@ void triggerInterrupt();
 void rangeToggled();
 
 void saveBufferToSd();
-void saveScreenshotToSd();
+void saveScreenshotToSd(char* filename);
 
 void scopeSettings();
 

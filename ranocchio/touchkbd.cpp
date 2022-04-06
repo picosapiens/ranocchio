@@ -27,7 +27,7 @@ extern MCUFRIEND_kbv tft;
 
 char keyboardkeys[4][10] = { {'1','2','3','4','5','6','7','8','9','0'}, {'Q','W','E','R','T','Y','U','I','O','P'}, {'A','S','D','F','G','H','J','K','L','!'}, {'Z','X','C',' ',' ','<','V','B','N','M'} };
 
-int touchkeyinput(char* s, int numchars, char* instructions)
+int touchkeyinput(char* s, int numchars, char* instructions, char* toggleoptions[], int numtoggleoptions, int* togglechoice)
 {
   int index = 0;
   s[0] = '\0'; // May want to change this eventually so there can be default text filled in by the caller?
@@ -45,7 +45,16 @@ int touchkeyinput(char* s, int numchars, char* instructions)
       tft.print(keyboardkeys[r][c]);
     }
   }
-  tft.setCursor(20,30);
+
+  if( (NULL != toggleoptions) && (0<numtoggleoptions) )
+  {
+    if(*togglechoice >= numtoggleoptions)
+      *togglechoice = 0;
+    tft.setCursor(10,60);
+    tft.print(toggleoptions[*togglechoice]);
+  }
+  
+  tft.setCursor(20,35);
   
   bool done = false;
   while(!done)
@@ -72,7 +81,7 @@ int touchkeyinput(char* s, int numchars, char* instructions)
               if(0<index)
               {
                 s[--index]='\0';
-                tft.fillRect(20,30,160,18,COLOR_BLACK);
+                tft.fillRect(20,30,160,19,COLOR_BLACK);
                 tft.setCursor(20,30);
                 tft.print(s);
               }
@@ -89,6 +98,18 @@ int touchkeyinput(char* s, int numchars, char* instructions)
             break;
           }
         }
+      }
+    } else { // Negative row means the tap occurred above the keyboard
+      *togglechoice = (*togglechoice+1)%numtoggleoptions;
+      if( numtoggleoptions )
+      {
+        int x,y;
+        x = tft.getCursorX();
+        y = tft.getCursorY();
+        tft.fillRect(0,60,SCREENWIDTH,12,COLOR_BLACK);
+        tft.setCursor(10,60);
+        tft.print(toggleoptions[*togglechoice]);
+        tft.setCursor(x,y);
       }
     }
     delay(200);

@@ -539,7 +539,9 @@ void scopeSettings()
     tft.print(F("Save to SD"));
 
     tft.setCursor(5, 5 + 2*SCREENHEIGHT/3);
-    tft.print(F("Save\nScreenshot"));
+    tft.println(F("Sample Rate:"));
+    tft.print(16000/MySettings.ADCprescaler/13);
+    tft.print(F(" kS/s"));
 
     tft.setCursor(5 + SCREENWIDTH/2, 5 + 2*SCREENHEIGHT/3);
     tft.print("FFT");
@@ -561,8 +563,10 @@ void scopeSettings()
         analyzeData(true);
         returntomain = true;
       } else { // Bottom
-        // Save screenshot
-        saveScreenshotToSd();
+        // Adjust sample rate
+        MySettings.ADCprescaler = 2*MySettings.ADCprescaler;
+        if(32 < MySettings.ADCprescaler)
+          MySettings.ADCprescaler = 8;
       }
     } else { //                   *** Right column ***
       if( tp.y < SCREENHEIGHT/3 ) // Top
@@ -570,8 +574,8 @@ void scopeSettings()
         // Toggle between RMS and P-P voltage display in the info bar
         MySettings.displayrms = !(MySettings.displayrms);
       } else if ( tp.y < 2*SCREENHEIGHT/3) { // Middle
-        // Save data to SD Card
-        saveBufferToSd();
+        // Save data (or screenshot) to SD Card
+        saveBufferToSd(); // Gives options for data file, bmp screenshot, or both
       } else {
         // Frequency analysis
         fftsubmode();
@@ -962,10 +966,12 @@ void scopeMode()
           }
           startADC();
           wait = true; freeze=false;
+          
           while(ADCCounter<=myindex) // We start looking at trigger late so that waitDuration can't make us stop before the entire buffer contains valid data
             delayMicroseconds(1);
           currentstate = (ADCBuffer[myindex]>=triggerlevel);
           //Serial.print("Initial trigger-relative state "); Serial.println(currentstate);
+          #warning ADC prescalers less than 32 are not working
           switch(triggertype)
           {
             case RISINGEDGE:
@@ -1012,7 +1018,7 @@ void scopeMode()
               myindex = (myindex+1)%ADCBUFFERSIZE;
             }
           }
-          #warning Should write an indicator to the screen to show measurement is running
+          
           delay(10);
           deinitADC();
           scrollindex = 0;
@@ -1522,54 +1528,85 @@ void saveBufferToSd()
   }
 
   // Get file name
-  char str[26]; // only need size 11 here but will reuse the array below
-  str[0] = '\0';
-  int i = touchkeyinput(str, 8, "Enter file name (empty to cancel)");
-  if(0==i)
+  char filename[13]; // only need size 11 for .m but will reuse the array below with bmp suffix
+  const char* opts[] = {"Both","Data","Pict"};
+  int optionchoice = 0;
+  filename[0] = '\0';
+  int numchars = touchkeyinput(filename, 8, "File name(empty to cancel)", opts, 3, &optionchoice);
+  if(0==numchars)
     return; // Don't proceed without at least one character in the file name
-  str[i] = '.';
-  str[i+1] = 'm';
-  str[i+2] = '\0';
 
-  File myFile = SD.open(str, FILE_WRITE);
-  if (myFile)
+  char str[26];
+  str[0] = '\0';
+  touchkeyinput(str, 25, "Enter caption/note", NULL, NULL, NULL);
+
+  if( 2 > optionchoice )
   {
-    str[0] = '\0';
-    i = touchkeyinput(str, 25, "Enter notes");
-    
-    myFile.println(F("% Ranocchio scopemeter output file"));
-    myFile.println("");
-    myFile.println(str); // Notes
-    myFile.println("");
-    myFile.print(F("timestep_ns = ")); myFile.print(dtbuffered_ns); myFile.println(";");
-    myFile.println("");
-    myFile.print(F("microvolts_per_count = ")); myFile.print(vresbuffered_uV); myFile.println(";");
-    myFile.println("");
-    myFile.println(F("Data = ["));
-    myFile.print(ADCBuffer[ADCCounter]);
-    for(int i=1; i<ADCBUFFERSIZE; i++)
+    filename[numchars] = '.';
+    filename[numchars+1] = 'm';
+    filename[numchars+2] = '\0';
+  
+    File myFile = SD.open(filename, FILE_WRITE);
+    if (myFile)
     {
-      myFile.print(',');
-      myFile.print(ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]);
+      myFile.println(F("% Ranocchio scopemeter output file"));
+      myFile.println("");
+      myFile.println(str); // Notes
+      myFile.println("");
+      myFile.print(F("timestep_ns = ")); myFile.print(dtbuffered_ns); myFile.println(";");
+      myFile.println("");
+      myFile.print(F("microvolts_per_count = ")); myFile.print(vresbuffered_uV); myFile.println(";");
+      myFile.println("");
+      myFile.println(F("Data = ["));
+      myFile.print(ADCBuffer[ADCCounter]);
+      for(int i=1; i<ADCBUFFERSIZE; i++)
+      {
+        myFile.print(',');
+        myFile.print(ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]);
+      }
+      myFile.println("];");
+      myFile.close();
+    } else {
+      myFile.close();
+      tft.fillScreen(COLOR_BLACK);
+      tft.setCursor(1,10);
+      tft.setTextSize(2);
+      tft.setTextColor(COLOR_WHITE);
+      tft.print(F("Unable to write to file!"));
+      tp.z = 0;
+      while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
+        readResistiveTouch();
+      return;
     }
-    myFile.println("];");
-    myFile.close();
-  } else {
-    myFile.close();
-    tft.fillScreen(COLOR_BLACK);
-    tft.setCursor(1,10);
-    tft.setTextSize(2);
-    tft.setTextColor(COLOR_WHITE);
-    tft.print(F("Unable to write to file!"));
-    tp.z = 0;
-    while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
-      readResistiveTouch();
-    return;
   }
+
+  if( 0 == optionchoice%3 )
+  {
+    filename[numchars] = '.';
+    filename[numchars+1] = 'b';
+    filename[numchars+2] = 'm';
+    filename[numchars+3] = 'p';
+    filename[numchars+4] = '\0';
+
+    // Draw the screen we want to save
+    plotanalogdata();
+    plotVertScale();
+    plotHorizScale();
+    plotStatusBar();
+    tft.fillRect(0, PLOTTERY+PLOTTERH+16, SCREENWIDTH, SCREENHEIGHT-PLOTTERY-PLOTTERH-16, COLOR_BLACK);
+    tft.setTextColor(COLOR_WHITE);
+    tft.setTextSize(2);
+    tft.setCursor(2,SCREENHEIGHT-24);
+    tft.print(str);
+  
+    saveScreenshotToSd(filename);
+  }
+
 }
 
 // Derived from http://www.technoblogy.com/show?398X
-void saveScreenshotToSd()
+// Licensing terms for this function are unclear. GPL may not apply. Contact original poster for more information.
+void saveScreenshotToSd(char* filename)
 {
   // Initialize SD card if needed
   if(!SDready)
@@ -1586,32 +1623,6 @@ void saveScreenshotToSd()
       readResistiveTouch();
     return;
   }
-
-  // Get file name
-  char filename[13];
-  filename[0] = '\0';
-  int i = touchkeyinput(filename, 8, "Enter file name");
-  if(0==i)
-    return; // Don't proceed without at least one character in the file name
-  filename[i] = '.';
-  filename[i+1] = 'b';
-  filename[i+2] = 'm';
-  filename[i+3] = 'p';
-  filename[i+4] = '\0';
-
-  char caption[26];
-  caption[0] = '\0';
-  i = touchkeyinput(caption, 25, "Enter caption");
-
-  plotanalogdata();
-  plotVertScale();
-  plotHorizScale();
-  plotStatusBar();
-  tft.fillRect(0, PLOTTERY+PLOTTERH+16, SCREENWIDTH, SCREENHEIGHT-PLOTTERY-PLOTTERH-16, COLOR_BLACK);
-  tft.setTextColor(COLOR_WHITE);
-  tft.setTextSize(2);
-  tft.setCursor(2,SCREENHEIGHT-24);
-  tft.print(caption);
 
   #define BMPSIZE (54 + 4 * 320 * 240)
   #define BMPNUM (320*240)

@@ -209,28 +209,31 @@ void initADC(void)
  switch(MySettings.ADCprescaler)
  {
   case 4:
-    cbi(ADCSRA,ADPS2); // picosapiens: Need to update to allow to change
+    cbi(ADCSRA,ADPS2); // picosapiens: This should be possible with 7bit resolution but not sure if I have to do something special
     sbi(ADCSRA,ADPS1);
     cbi(ADCSRA,ADPS0);
     dtbuffered_ns = 3250;
     break;
   case 8:
-    cbi(ADCSRA,ADPS2); // picosapiens: Need to update to allow to change
+    cbi(ADCSRA,ADPS2);
     sbi(ADCSRA,ADPS1);
     sbi(ADCSRA,ADPS0);
     dtbuffered_ns = 6500;
+    break;
   case 16:
-    sbi(ADCSRA,ADPS2); // picosapiens: Need to update to allow to change
+    sbi(ADCSRA,ADPS2);
     cbi(ADCSRA,ADPS1);
     cbi(ADCSRA,ADPS0);
     dtbuffered_ns = 13000;
-  case 32:
-    sbi(ADCSRA,ADPS2); // picosapiens: Need to update to allow to change
+    break;
+  default: // case 32
+    sbi(ADCSRA,ADPS2);
     cbi(ADCSRA,ADPS1);
     sbi(ADCSRA,ADPS0);
     dtbuffered_ns = 26000;
+    break;
  }
-
+  //Serial.print("dtbuffered_ns = "); Serial.print(dtbuffered_ns); Serial.print(' '); Serial.print(ADCSRA); Serial.print(" ADCprescaler "); Serial.println(MySettings.ADCprescaler);
 
 	//---------------------------------------------------------------------
 	// ADCSRB settings
@@ -279,7 +282,7 @@ void initADC(void)
 	sbi(DIDR0,ADC2D);
 	sbi(DIDR0,ADC1D);
 	sbi(DIDR0,ADC0D);*/
-  #warning Mega has more digital input buffers than can be turned off
+  #warning Mega has more digital input buffers that can be turned off
 }
 
 //-----------------------------------------------------------------------------

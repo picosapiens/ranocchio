@@ -31,6 +31,6 @@
 
 extern char keyboardkeys[4][10];
 
-int touchkeyinput(char* s, int numchars, char* instructions);
+int touchkeyinput(char* s, int numchars, char* instructions, char* toggleoptions[], int numtoggleoptions, int* togglechoice);
 
 #endif //TOUCHKBD

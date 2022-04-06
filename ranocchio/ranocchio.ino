@@ -154,7 +154,7 @@ void setup() {
   //analogWrite(44,triggerlevel);
   MySettings.uVperdiv = pow((long int)10,vpower)*(vcoarsescale[vcoarseindex]+vfineadjust);
   MySettings.usperdiv = 2000;
-  MySettings.ADCprescaler = 8;
+  MySettings.ADCprescaler = 32;
   MySettings.displayrms = true;
   verticalmidpoint = 0;
   #warning ADCprescaler=4 doesn't work -- may need to do something to get it to stop at 6 bits?
