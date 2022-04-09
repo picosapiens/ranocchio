@@ -1789,22 +1789,22 @@ void rangeToggled()
   keeprunning = false;
 }
 
-void updateCurrentRange()
+void updateCurrentRange() // Update the current setting for range
 {
   switch(PIND&B11) // Port D is pins 18,19,20,21 so get the bottom two bits
   //switch( digitalRead(20)<<1 | digitalRead(21) )
   {
     case B11:
-      MySettings.currentrange_mV = 220590;
+      MySettings.currentrange_mV = 221760;
       break;
     case B01:
-      MySettings.currentrange_mV = 70527;
+      MySettings.currentrange_mV = 69300;
       break;
     case B10:
-      MySettings.currentrange_mV = 32819;
+      MySettings.currentrange_mV = 27610;
       break;
     case B00:
-      MySettings.currentrange_mV = 10493;
+      MySettings.currentrange_mV = 8628;
       break;
   }
 }

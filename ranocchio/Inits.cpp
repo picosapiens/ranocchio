@@ -123,6 +123,7 @@ void initPins(void)
 //-----------------------------------------------------------------------------
 void initADC(void)
 {
+  
 	//---------------------------------------------------------------------
 	// ADMUX settings
 	//---------------------------------------------------------------------
@@ -137,8 +138,11 @@ void initADC(void)
 	//	1	0	Reserved
 	//	1	1	Internal 1.1V Voltage Reference with external
 	//			capacitor at AREF pin
-	cbi(ADMUX,REFS1);
-	sbi(ADMUX,REFS0);
+	//cbi(ADMUX,REFS1);
+	//sbi(ADMUX,REFS0);
+  analogReference(INTERNAL1V1);
+  for(int i=0;i<100;i++)
+    analogRead(ADCPIN); // Drain the excess voltage from the capacitor
 	// The ADLAR bit affects the presentation of the ADC conversion result
 	// in the ADC Data Register. Write one to ADLAR to left adjust the
 	// result. Otherwise, the result is right adjusted. Changing the ADLAR
@@ -311,6 +315,9 @@ void deinitADC(void)
   sbi(ADCSRA,ADPS2);
   sbi(ADCSRA,ADPS1);
   sbi(ADCSRA,ADPS0);
+
+  analogReference(DEFAULT);
+  analogRead(ADCPIN);
 }
 
 //-----------------------------------------------------------------------------
