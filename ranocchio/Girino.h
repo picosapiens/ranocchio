@@ -30,7 +30,7 @@
 
 #define DEBUG		0
 
-#define ADCBUFFERSIZE	3000
+#define ADCBUFFERSIZE	2048 // Must be a power of two
 
 #define ADCPIN		7
 #define errorPin	51
@@ -86,8 +86,8 @@ void setTriggerEvent( uint8_t event );
 extern volatile  boolean wait;
 extern          uint16_t waitDuration;
 extern volatile uint16_t stopIndex;
-extern volatile uint16_t ADCCounter;
-extern volatile  uint8_t ADCBuffer[ADCBUFFERSIZE];
+extern  uint16_t ADCCounter;
+extern   uint8_t ADCBuffer[ADCBUFFERSIZE];
 extern volatile  boolean freeze;
 
 extern           uint8_t prescaler;

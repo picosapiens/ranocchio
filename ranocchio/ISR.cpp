@@ -28,6 +28,7 @@
 //-----------------------------------------------------------------------------
 // ADC Conversion Complete Interrupt
 //-----------------------------------------------------------------------------
+/*
 ISR(ADC_vect)
 {
 	// When ADCL is read, the ADC Data Register is not updated until ADCH
@@ -35,30 +36,11 @@ ISR(ADC_vect)
 	// than 8-bit precision is required, it is sufficient to read ADCH.
 	// Otherwise, ADCL must be read first, then ADCH.
 	ADCBuffer[ADCCounter] = ADCH;
-/*
-  switch(triggerstatus)
-  {
-    case 0: // ready
-      if(((RISINGEDGE==triggertype) && (triplesum < tripletrig))||((FALLINGEDGE==triggertype) && (triplesum > tripletrig)))
-      {
-        triggerstatus++;
-        //Serial.print("trigger armed, stopIndex = "); Serial.println(stopIndex);
-      }
-      break;
-    case 1: // armed
-      if((RISINGEDGE==triggertype && triplesum >= tripletrig)||(FALLINGEDGE==triggertype && triplesum <= tripletrig))
-      {
-        triggerstatus++;
-        stopIndex = (ADCCounter + waitDuration)%ADCBUFFERSIZE;
-        //Serial.println("TRIGGER");
-      }
-      break;     
-  }*/
 
 	ADCCounter = ( ADCCounter + 1 ) % ADCBUFFERSIZE;
 
-	if ( wait )
-	{
+	//if ( wait )
+	//{
 		if ( stopIndex == ADCCounter )
 		{
 			// Freeze situation
@@ -67,9 +49,9 @@ ISR(ADC_vect)
 
 			freeze = true;
 		}
-	}
+	//}
 }
-
+*/
 //-----------------------------------------------------------------------------
 // Analog Comparator interrupt - not available on Mega
 //-----------------------------------------------------------------------------

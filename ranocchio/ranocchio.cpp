@@ -20,10 +20,11 @@
 //
 //-----------------------------------------------------------------------------
 
+volatile bool keeprunning;
+
 #include "ranocchio.h"
 
-volatile RanocchioSettings MySettings;
-#warning I dont think this needs to be volatile - not changed in interrupt
+RanocchioSettings MySettings;
 
 volatile bool redrawinfo=false;
 
@@ -241,11 +242,6 @@ void plotStatusBar()
       tft.drawFastHLine(226,0,7,COLOR_WHITE);
       tft.drawFastVLine(232,0,8,COLOR_WHITE);
       tft.drawFastHLine(233,8,7,COLOR_WHITE);
-      break;
-    case ANYEDGE:
-      tft.drawFastHLine(226,0,15,COLOR_WHITE);
-      tft.drawFastVLine(232,0,8,COLOR_WHITE);
-      tft.drawFastHLine(233,0,15,COLOR_WHITE);
       break;
     case NOTRIGGER:
       tft.setCursor(226,0);
@@ -566,7 +562,7 @@ void scopeSettings()
         // Adjust sample rate
         MySettings.ADCprescaler = 2*MySettings.ADCprescaler;
         if(32 < MySettings.ADCprescaler)
-          MySettings.ADCprescaler = 8;
+          MySettings.ADCprescaler = 2;
       }
     } else { //                   *** Right column ***
       if( tp.y < SCREENHEIGHT/3 ) // Top
@@ -927,6 +923,7 @@ void scopeMode()
             break;
         }
       } else if ( PLOTTERY+PLOTTERH < tp.y) { // Very bottom of screen
+        // TODO: Move most of this to a separate function. Maybe saving the stack will take less time in a smaller chunk?
         tft.fillRect(0,PLOTTERY+PLOTTERH+1,SCREENWIDTH,SCREENHEIGHT-PLOTTERY-PLOTTERH,COLOR_BLACK);
         tft.setCursor(10,PLOTTERY+PLOTTERH+2);
         tft.setTextSize(2);
@@ -938,92 +935,10 @@ void scopeMode()
           tft.print(F("[Long press to stop; Change range to abort]"));
         do
         {
-          memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
-          vresbuffered_uV = MySettings.currentrange_mV*1000/128;
-          /*triplesum = 0;
-          tripletrig = 3*triggerlevel;*/
-          sei();
-          initPins();
-          initADC();
-          delay(10);
-          ADCCounter=0;
-          
-          triggerindex = ADCBUFFERSIZE+1; // invalid value until we get a trigger
-          
-          int myindex=ADCBUFFERSIZE-waitDuration;
-          //uint8_t laststate = 3;
-          bool currentstate;
-          bool armwhen,triggerwhen;
-          uint8_t trigger;
-          bool once = true;
-          if(NOTRIGGER == triggertype)
-          {
-            trigger = 2; // triggered
-            stopIndex = ADCCounter; // fill the whole buffer
-          } else {
-            trigger = 0; // initializing
-            stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
-          }
-          startADC();
-          wait = true; freeze=false;
-          
-          while(ADCCounter<=myindex) // We start looking at trigger late so that waitDuration can't make us stop before the entire buffer contains valid data
-            delayMicroseconds(1);
-          currentstate = (ADCBuffer[myindex]>=triggerlevel);
-          //Serial.print("Initial trigger-relative state "); Serial.println(currentstate);
-          #warning ADC prescalers less than 32 are not working
-          switch(triggertype)
-          {
-            case RISINGEDGE:
-              armwhen = false;
-              triggerwhen = true;
-              break;
-            case FALLINGEDGE:
-              armwhen = true;
-              triggerwhen = false;
-              break;
-            case ANYEDGE:
-              armwhen = currentstate;
-              triggerwhen = !currentstate;
-              break;
-          }
-          while(!freeze)
-          {
-            while( myindex != (ADCCounter + ADCBUFFERSIZE - 1)%ADCBUFFERSIZE )
-            {
-              //laststate = currentstate;
-              currentstate = (ADCBuffer[myindex]>=triggerlevel);
-              switch(trigger)
-              {
-                case 0: // waiting
-                  if(currentstate == armwhen)
-                  {
-                    trigger++;
-                    //Serial.print("Arm index"); Serial.print(myindex); Serial.print(", state "); Serial.print(currentstate); Serial.print(", armwhen "); Serial.println(armwhen);
-                  }
-                  break;
-                case 1: // armed
-                  if(currentstate == triggerwhen)
-                  {
-                    trigger++;
-                    //Serial.print("Trigger index "); Serial.print(myindex); Serial.print(", state "); Serial.print(currentstate); Serial.print(", triggerhwen "); Serial.println(triggerwhen);
-                  }
-                  break;
-                case 2: // triggered
-                  triggerindex = myindex;
-                  stopIndex = ( myindex + waitDuration ) % ADCBUFFERSIZE;
-                  trigger++;
-                  break;
-              }
-              myindex = (myindex+1)%ADCBUFFERSIZE;
-            }
-          }
-          
-          delay(10);
-          deinitADC();
-          scrollindex = 0;
+          keeprunning = true;
+          runScope();
           plotanalogdata();
-          
+      
           tp.z = 0;
           readResistiveTouch();
           if( MINPRESSURE<tp.z && MAXPRESSURE>tp.z)
@@ -1035,8 +950,7 @@ void scopeMode()
             delay(300);
             break;
           }
-          delay(1000);
-        } while( SINGLE != triggermode );
+        } while (SINGLE != triggermode);
         plotHorizScale();
         plotInformation();
         }
@@ -1207,6 +1121,112 @@ void scopeMode()
         }
       }
   }
+}
+
+void runScope()
+{
+  #warning I think I may need to do away with ISR(ADC_vect) and just calibrate a loop here so we do not miss anything
+
+  memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
+  vresbuffered_uV = MySettings.currentrange_mV*1000/128;
+  /*triplesum = 0;
+  tripletrig = 3*triggerlevel;*/
+  //TIMSK0 = 0; // turn off timer0 for lower jitter? https://forum.arduino.cc/t/fft-and-adc-in-free-running-mode-on-mega-board-solved/639062/13
+  //sei();
+  //initPins();
+  initADC();
+  //delay(10);
+  ADCCounter=0;
+  
+  //triggerindex = ADCBUFFERSIZE+1; // invalid value until we get a trigger
+  
+  //int myindex=ADCBUFFERSIZE-waitDuration;
+  //uint8_t laststate = 3;
+  bool currentstate;
+  bool armwhen,triggerwhen;
+  uint8_t trigger;
+  //bool once = true;
+  if(NOTRIGGER == triggertype)
+  {
+    trigger = 3; // triggered
+    stopIndex = ADCCounter; // fill the whole buffer
+  } else {
+    trigger = 0; // initializing
+    stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
+  }
+  //wait = true; freeze=false;
+  //currentstate = (ADCBuffer[ADCCounter]>=triggerlevel);
+  //Serial.print("Initial trigger-relative state "); Serial.println(currentstate);
+  switch(triggertype)
+  {
+    case RISINGEDGE:
+      armwhen = false;
+      triggerwhen = true;
+      break;
+    case FALLINGEDGE:
+      armwhen = true;
+      triggerwhen = false;
+      break;
+      /*
+    case ANYEDGE:
+      armwhen = currentstate;
+      triggerwhen = !currentstate;
+      break;
+      */
+  }
+  //Serial.print(PCICR); Serial.print(' '); Serial.println(PCMSK0);
+  //Serial.print(TIMSK0); Serial.print(' '); Serial.print(TIMSK1); Serial.print(' '); Serial.println(TIMSK2);
+  keeprunning = true;
+  //noInterrupts();
+  TIMSK0 = 0; // turn off timer0 for lower jitter - delay() and millis() killed
+  startADC();
+  while(true)
+  {
+    //while( myindex != (ADCCounter + ADCBUFFERSIZE - 1)%ADCBUFFERSIZE )
+    //{
+      //laststate = currentstate;
+      while( !(ADCSRA&(1<<ADIF)) )
+        if(!keeprunning) break; // Wait for new sample or indication to stop running
+      ADCBuffer[ADCCounter] = ADCH; // Grab sample
+      sbi(ADCSRA,ADIF);
+      currentstate = (ADCBuffer[ADCCounter]>=triggerlevel);
+      //if( currentstate == comparisonstate[trigger] )
+      switch(trigger)
+      {
+        case 0: // trigger-disabled period ( to make sure we fill at least ADCBUFFERSIZE-waitDuration before trigger )
+          if( ADCCounter > ADCBUFFERSIZE-waitDuration )
+            trigger++;
+          break;
+        case 1: // waiting
+          if(currentstate == armwhen)
+          {
+            trigger++;
+            //Serial.print("Arm index"); Serial.print(myindex); Serial.print(", state "); Serial.print(currentstate); Serial.print(", armwhen "); Serial.println(armwhen);
+          }
+          break;
+        case 2: // armed
+          if(currentstate == triggerwhen)
+          {
+            trigger++;
+            //Serial.print("Trigger index "); Serial.print(myindex); Serial.print(", state "); Serial.print(currentstate); Serial.print(", triggerhwen "); Serial.println(triggerwhen);
+          }
+          break;
+        case 3: // triggered
+          triggerindex = ADCCounter;
+          stopIndex = ( ADCCounter + waitDuration ) & (ADCBUFFERSIZE-1);
+          trigger++;
+          break;
+      }
+      ADCCounter = ADCCounter+1;
+      if( ADCBUFFERSIZE == ADCCounter )
+        ADCCounter = 0;
+      if( stopIndex == ADCCounter)
+        break;
+    }
+    //interrupts();
+    TIMSK0 = 1; 
+    deinitADC();
+    scrollindex = 0;
 }
 
 void exportData()
@@ -1762,27 +1782,11 @@ void analyzeData(bool adjustwindow) // Analyze the portion of the data between s
  }
 }
 
-/*
-void triggerInterrupt()
-{
-  // Note that the attachinterrupt function and the atmega chip itself have different conventions for numbering the interrupts.
-  // As far as Atmega is concerned, on the Mega 2560, INT1 is pin 20, INT2 is pin 19, INT3 is pin 18, INT4 is pin 2, INT5 is pin 3.
-  // https://forum.arduino.cc/t/interrupt-runs-after-flag-cleared/685526/13
-  cbi(EIMSK,INT3);
-  stopIndex = (ADCCounter + waitDuration)%ADCBUFFERSIZE;
-  Serial.println(F("TRIGGER"));
-}*/
-
 void rangeToggled()
 {
-  // If data collection is running, stop it
-  //if(wait)
-  //{
-    //cbi( ADCSRA, ADEN );
-    freeze = true;
-  //}
-  //wait = false;
+  //freeze = true;
   redrawinfo = true;
+  keeprunning = false;
 }
 
 void updateCurrentRange()

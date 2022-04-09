@@ -190,10 +190,11 @@ void initADC(void)
 	// selected trigger signal. The trigger source is selected by setting
 	// the ADC Trigger Select bits, ADTS in ADCSRB.
 	sbi(ADCSRA,ADATE);
+  #warning not sure it is actually necessary to set ADATE
   
 	// When this bit is written to one and the I-bit in SREG is set, the
 	// ADC Conversion Complete Interrupt is activated.
-	sbi(ADCSRA,ADIE);
+	cbi(ADCSRA,ADIE); // NOT USING INTERRUPT
  
 	// These bits determine the division factor between the system clock
 	// frequency and the input clock to the ADC.
@@ -208,8 +209,14 @@ void initADC(void)
 	//	1	1	1	128
  switch(MySettings.ADCprescaler)
  {
+  case 2:
+    cbi(ADCSRA,ADPS2);
+    cbi(ADCSRA,ADPS1);
+    sbi(ADCSRA,ADPS0);
+    dtbuffered_ns = 1625;
+    break;
   case 4:
-    cbi(ADCSRA,ADPS2); // picosapiens: This should be possible with 7bit resolution but not sure if I have to do something special
+    cbi(ADCSRA,ADPS2);
     sbi(ADCSRA,ADPS1);
     cbi(ADCSRA,ADPS0);
     dtbuffered_ns = 3250;

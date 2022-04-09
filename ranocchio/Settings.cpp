@@ -43,6 +43,7 @@ void stopADC( void )
 //-----------------------------------------------------------------------------
 // startAnalogComparator()
 //-----------------------------------------------------------------------------
+/*
 void startAnalogComparator( void )
 {
 	// Enable Analog Comparator Interrupt
@@ -53,6 +54,7 @@ void stopAnalogComparator( void )
 	// Disable Analog Comparator interrupt
 	cbi( ACSR,ACIE );
 }
+*/
 
 //-----------------------------------------------------------------------------
 // Set and modify ADC prescaler

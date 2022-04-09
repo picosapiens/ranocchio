@@ -36,6 +36,10 @@
 //define TouchScreen TouchScreen_kbv
 //define TSPoint TSPoint_kbv;
 
+#define NOP __asm__ __volatile__ ("nop\n\t")
+
+extern volatile bool keeprunning;
+
 #define SCREENWIDTH 320
 #define SCREENHEIGHT 240
 
@@ -140,9 +144,8 @@ extern uint16_t triggerindex;
 extern uint8_t triggertype;
 #define RISINGEDGE 0
 #define FALLINGEDGE 1
-#define ANYEDGE 2
-#define NOTRIGGER 3
-#define NUMTTYPES 4
+#define NOTRIGGER 2
+#define NUMTTYPES 3
 
 extern uint16_t tripletrig;
 extern uint16_t triplesum;
@@ -170,7 +173,7 @@ extern volatile int32_t verticalmidpoint;
 extern int16_t rightmostindex;
 extern int16_t cursorpos;
 
-extern volatile RanocchioSettings MySettings;
+extern RanocchioSettings MySettings;
 
 void plotanalogdata(); //analog data
 void plotdigitaldata();
@@ -197,6 +200,7 @@ void meterMode();
 void scopeMode();
 void logicMode();
 void fftsubmode();
+void runScope();
 
 void triggerInterrupt();
 void rangeToggled();

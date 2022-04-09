@@ -36,8 +36,8 @@
 volatile  boolean wait;
          uint16_t waitDuration;
 volatile uint16_t stopIndex;
-volatile uint16_t ADCCounter=0;
-volatile  uint8_t ADCBuffer[ADCBUFFERSIZE];
+ uint16_t ADCCounter=0;
+  uint8_t ADCBuffer[ADCBUFFERSIZE];
 volatile  boolean freeze;
 
           uint8_t prescaler;
@@ -70,7 +70,7 @@ uint8_t leftfunc;
 
 File root;
 
-
+/*
 void printDirectory(File dir, int numTabs) {
   while (true) {
 
@@ -93,14 +93,14 @@ void printDirectory(File dir, int numTabs) {
     }
     entry.close();
   }
-}
+}*/
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   ID = tft.readID(); //
-  Serial.print("ID = 0x");
-  Serial.println(ID, HEX);
+  //Serial.print("ID = 0x");
+  //Serial.println(ID, HEX);
   tft.begin(ID);
   tft.setRotation(1); // Landscape
   tft.fillScreen(COLOR_BLACK);
@@ -144,7 +144,6 @@ void setup() {
   pinMode(20,INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(20),rangeToggled,CHANGE);
   updateCurrentRange();
-  #warning I do not know why readResistiveTouch stops working after these interrupts fire in scope mode with data on the screen
  
   vcoarseindex = 3;
   vfineadjust = 0;
@@ -157,10 +156,9 @@ void setup() {
   MySettings.ADCprescaler = 32;
   MySettings.displayrms = true;
   verticalmidpoint = 0;
-  #warning ADCprescaler=4 doesn't work -- may need to do something to get it to stop at 6 bits?
   rightfunc = SCALE;
   leftfunc = COARSEADJUST;
-  triggertype = RISINGEDGE;
+  triggertype = NOTRIGGER;
   triggermode = SINGLE;
   //pinMode(18,INPUT);
   SDready = false;
