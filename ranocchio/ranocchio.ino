@@ -44,7 +44,7 @@ volatile  boolean freeze;
           uint8_t triggerEvent;
           uint8_t threshold;
 
-             char commandBuffer[COMBUFFERSIZE+1];
+//             char commandBuffer[COMBUFFERSIZE+1];
 
              bool SDready;
             
@@ -110,7 +110,7 @@ void setup() {
  //memset( (void *)commandBuffer, 0, sizeof(commandBuffer) );
   ADCCounter = 0;
   wait = false;
-  waitDuration = ADCBUFFERSIZE-100; // Subtract a small amount of pretrigger time if desired
+  waitDuration = ADCBUFFERSIZE-200; // Subtract a small amount of pretrigger time if desired
   stopIndex = -1;
   freeze = false;
 
@@ -158,7 +158,7 @@ void setup() {
   verticalmidpoint = 0;
   rightfunc = SCALE;
   leftfunc = COARSEADJUST;
-  triggertype = NOTRIGGER;
+  triggertype = RISINGEDGE;
   triggermode = SINGLE;
   //pinMode(18,INPUT);
   SDready = false;

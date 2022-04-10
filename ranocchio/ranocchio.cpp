@@ -367,16 +367,19 @@ void plotInformation()
           sprintf(str, "P-P=%ldmV ", dat);
       }
       tft.print(str);
-
-      if(datafreq_Hzx10 < 1000 )
+      if(datafreq_Hzx10 < 0)
+        sprintf(str, "f=??? ");
+      else if(datafreq_Hzx10 < 1000 )
         sprintf(str, "f=%ld.%ldHz ", datafreq_Hzx10/10, datafreq_Hzx10%10);
       else if (datafreq_Hzx10 > 0)
         sprintf(str, "f=%ldHz ", datafreq_Hzx10/10);
-      else
-        sprintf(str, "f=??? ");
+        
       tft.print(str);
 
-      sprintf(str, "d%%=%u.%u", datadutycyclex1000/10, datadutycyclex1000%10);
+      if( datadutycyclex1000 > 1000)
+        sprintf(str, "d%%=???");
+      else
+        sprintf(str, "d%%=%u.%u", datadutycyclex1000/10, datadutycyclex1000%10);
       tft.print(str);
         /*
       if(datafreq_Hzx10 < 1000 )
@@ -562,7 +565,7 @@ void scopeSettings()
         // Adjust sample rate
         MySettings.ADCprescaler = 2*MySettings.ADCprescaler;
         if(32 < MySettings.ADCprescaler)
-          MySettings.ADCprescaler = 2;
+          MySettings.ADCprescaler = 4;
       }
     } else { //                   *** Right column ***
       if( tp.y < SCREENHEIGHT/3 ) // Top
@@ -592,7 +595,7 @@ void fftsubmode()
   
   // Resample to 256 points
   #define FFTSIZE 256
-  uint8_t fundindex = 2;
+  uint8_t fundindex = 2; // third index, assuming two complete cycles appeared in the on-screen interval
   int8_t data[FFTSIZE], im[FFTSIZE];
   int d = rightmostindex - scrollindex;
   float fsam = 1000000000.0/((float)d*dtbuffered_ns/FFTSIZE);
@@ -605,13 +608,14 @@ void fftsubmode()
   {
        mysum = 0;
        n=0;
-       for(int j = 0; j<d/FFTSIZE; j++) //(int)(ADCBuffer[(scrollindex+i*d/FFTSIZE)%ADCBUFFERSIZE]) - 128; // Could remove mean instead of subtracting 128?
+       /*
+       for(int j = 0; j<d/FFTSIZE; j++)
        {
          mysum += (long int)(ADCBuffer[(scrollindex+map(i,0,FFTSIZE-1,0,d)+j)%ADCBUFFERSIZE]);
          n++;
        }
-       //Serial.print(mysum); Serial.print(' '); Serial.println(n);
-       data[i] = (mysum/n - 128);
+       data[i] = (mysum/n - 128); // Might be better to subtract mean rather than 128 */
+       data[i] = (long int)(ADCBuffer[(scrollindex+map(i,0,FFTSIZE-1,0,d))%ADCBUFFERSIZE]);
        im[i] = 0;
   }
   fix_fft(data, im, 8, 0);
@@ -635,9 +639,9 @@ void fftsubmode()
   while(!returntomain)
   {
     mysum = 0;
-    for(int i=0; i<FFTSIZE/2; i++)
+    for(int i=fundindex+1; i<FFTSIZE/2; i++)
     {
-      if(i > fundindex)
+      if( 0 == (i%fundindex) ) // harmonics only
         mysum += pwr[(i+FFTSIZE/4)%(FFTSIZE/2)];
       //Serial.println(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)]);
     }
@@ -933,9 +937,9 @@ void scopeMode()
           tft.print(F("[Change range to abort]"));
         else
           tft.print(F("[Long press to stop; Change range to abort]"));
+        keeprunning = true;
         do
         {
-          keeprunning = true;
           runScope();
           plotanalogdata();
       
@@ -1129,104 +1133,107 @@ void runScope()
 
   memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
   vresbuffered_uV = MySettings.currentrange_mV*1000/128;
-  /*triplesum = 0;
-  tripletrig = 3*triggerlevel;*/
-  //TIMSK0 = 0; // turn off timer0 for lower jitter? https://forum.arduino.cc/t/fft-and-adc-in-free-running-mode-on-mega-board-solved/639062/13
-  //sei();
-  //initPins();
   initADC();
-  //delay(10);
   ADCCounter=0;
   
-  //triggerindex = ADCBUFFERSIZE+1; // invalid value until we get a trigger
-  
-  //int myindex=ADCBUFFERSIZE-waitDuration;
-  //uint8_t laststate = 3;
   bool currentstate;
-  bool armwhen,triggerwhen;
+  bool lookfor;
   uint8_t trigger;
-  //bool once = true;
   if(NOTRIGGER == triggertype)
   {
-    trigger = 3; // triggered
+    //trigger = 4; // triggered
+    trigger = 0;
     stopIndex = ADCCounter; // fill the whole buffer
   } else {
-    trigger = 0; // initializing
+    //trigger = 0; // initializing
+    trigger = 4;
     stopIndex = ADCBUFFERSIZE+1; // will never reach this, but will update when triggered
   }
-  //wait = true; freeze=false;
-  //currentstate = (ADCBuffer[ADCCounter]>=triggerlevel);
-  //Serial.print("Initial trigger-relative state "); Serial.println(currentstate);
+  
   switch(triggertype)
   {
     case RISINGEDGE:
-      armwhen = false;
-      triggerwhen = true;
+      lookfor = false;
       break;
     case FALLINGEDGE:
-      armwhen = true;
-      triggerwhen = false;
+      lookfor = true;
       break;
-      /*
-    case ANYEDGE:
-      armwhen = currentstate;
-      triggerwhen = !currentstate;
-      break;
-      */
   }
-  //Serial.print(PCICR); Serial.print(' '); Serial.println(PCMSK0);
-  //Serial.print(TIMSK0); Serial.print(' '); Serial.print(TIMSK1); Serial.print(' '); Serial.println(TIMSK2);
+
   keeprunning = true;
-  //noInterrupts();
+
   TIMSK0 = 0; // turn off timer0 for lower jitter - delay() and millis() killed
   startADC();
-  while(true)
+  if( MySettings.ADCprescaler < 8 ) // Can't spare the processor cycles to collect timely data before trigger
   {
-    //while( myindex != (ADCCounter + ADCBUFFERSIZE - 1)%ADCBUFFERSIZE )
-    //{
-      //laststate = currentstate;
+    while(true)
+    {
       while( !(ADCSRA&(1<<ADIF)) )
         if(!keeprunning) break; // Wait for new sample or indication to stop running
       ADCBuffer[ADCCounter] = ADCH; // Grab sample
-      sbi(ADCSRA,ADIF);
-      currentstate = (ADCBuffer[ADCCounter]>=triggerlevel);
-      //if( currentstate == comparisonstate[trigger] )
-      switch(trigger)
+      sbi(ADCSRA,ADIF); // Reset ADIF
+      if(trigger)
       {
-        case 0: // trigger-disabled period ( to make sure we fill at least ADCBUFFERSIZE-waitDuration before trigger )
-          if( ADCCounter > ADCBUFFERSIZE-waitDuration )
-            trigger++;
-          break;
-        case 1: // waiting
-          if(currentstate == armwhen)
-          {
-            trigger++;
-            //Serial.print("Arm index"); Serial.print(myindex); Serial.print(", state "); Serial.print(currentstate); Serial.print(", armwhen "); Serial.println(armwhen);
-          }
-          break;
-        case 2: // armed
-          if(currentstate == triggerwhen)
-          {
-            trigger++;
-            //Serial.print("Trigger index "); Serial.print(myindex); Serial.print(", state "); Serial.print(currentstate); Serial.print(", triggerhwen "); Serial.println(triggerwhen);
-          }
-          break;
-        case 3: // triggered
-          triggerindex = ADCCounter;
-          stopIndex = ( ADCCounter + waitDuration ) & (ADCBUFFERSIZE-1);
-          trigger++;
-          break;
+        if(lookfor == (ADCBuffer[ADCCounter]>=triggerlevel) )
+        {
+          lookfor = !lookfor;
+          if(1==trigger--)
+            stopIndex = ADCCounter; // Can't use waitDuration here because we drop some samples while checking for trigger
+        }
       }
       ADCCounter = ADCCounter+1;
       if( ADCBUFFERSIZE == ADCCounter )
         ADCCounter = 0;
-      if( stopIndex == ADCCounter)
+      if( stopIndex == ADCCounter )
         break;
     }
-    //interrupts();
-    TIMSK0 = 1; 
-    deinitADC();
-    scrollindex = 0;
+    triggerindex = ADCCounter;
+  } else { // ordinary operation with software trigger
+    while(true)
+    {
+        while( !(ADCSRA&(1<<ADIF)) )
+          if(!keeprunning) break; // Wait for new sample or indication to stop running
+        ADCBuffer[ADCCounter] = ADCH; // Grab sample
+        sbi(ADCSRA,ADIF); // Reset ADIF
+
+        currentstate = (ADCBuffer[ADCCounter]>=triggerlevel);   
+        switch(trigger)
+        {
+          case 4: // trigger-disabled period ( to make sure we fill at least ADCBUFFERSIZE-waitDuration before trigger )
+            if( ADCCounter > ADCBUFFERSIZE-waitDuration )
+              trigger--;
+            break;
+          case 3: // waiting
+            if(currentstate == lookfor)
+            {
+              lookfor = !lookfor;
+              trigger--;
+            }
+            break;
+          case 2: // armed
+            if(currentstate == lookfor)
+            {
+              trigger--;
+            }
+            triggerindex = ADCCounter;
+            break;
+          case 1: // triggered
+            stopIndex = ( triggerindex + waitDuration ) & (ADCBUFFERSIZE-1);
+            trigger--;
+            break;
+        }
+        
+        ADCCounter = ADCCounter+1;
+        if( ADCBUFFERSIZE == ADCCounter )
+          ADCCounter = 0;
+        if( stopIndex == ADCCounter)
+          break;
+    }
+  }
+    
+  TIMSK0 = 1; 
+  deinitADC();
+  scrollindex = 0;
 }
 
 void exportData()

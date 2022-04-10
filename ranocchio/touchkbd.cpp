@@ -70,10 +70,8 @@ int touchkeyinput(char* s, int numchars, char* instructions, char* toggleoptions
     {
       if( 0 <= col && 10 > col)
       {
-        if( index < numchars )
+        switch( keyboardkeys[row][col] )
         {
-          switch(keyboardkeys[row][col])
-          { 
             case '!':
               done = true;
               break;
@@ -95,8 +93,6 @@ int touchkeyinput(char* s, int numchars, char* instructions, char* toggleoptions
                 Serial.print(", char = "); Serial.println(s[index]);
                 index ++;
               }
-            break;
-          }
         }
       }
     } else { // Negative row means the tap occurred above the keyboard

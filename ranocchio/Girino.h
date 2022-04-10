@@ -33,12 +33,12 @@
 #define ADCBUFFERSIZE	2048 // Must be a power of two
 
 #define ADCPIN		7
-#define errorPin	51
+//define errorPin	51
 //define thresholdPin	53
 
 #define BAUDRATE	115200	// Baud rate of UART in bps
-#define COMMANDDELAY	10	// ms to wait for the filling of Serial buffer
-#define COMBUFFERSIZE	3	// Size of buffer for incoming numbers
+//define COMMANDDELAY	10	// ms to wait for the filling of Serial buffer
+//define COMBUFFERSIZE	3	// Size of buffer for incoming numbers
 
 #if DEBUG == 1
 	#define dprint(expression) Serial.print("# "); Serial.print( #expression ); Serial.print( ": " ); Serial.println( expression )
