@@ -317,7 +317,8 @@ void deinitADC(void)
   sbi(ADCSRA,ADPS0);
 
   analogReference(DEFAULT);
-  analogRead(ADCPIN);
+  for(int i=0;i<100;i++)
+    analogRead(ADCPIN);
 }
 
 //-----------------------------------------------------------------------------

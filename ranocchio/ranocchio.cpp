@@ -356,13 +356,13 @@ void plotInformation()
       {
         dat = (datarms*vresbuffered_uV)/1000;
         if(dat>1000)
-          sprintf(str, "RMS=%ld.%02ldV ", dat/1000, (dat%1000)/10);
+          sprintf(str, "RMS=%ld.%02ldV ", dat/1000, (dat%1000)/100);
         else
           sprintf(str, "RMS=%ldmV ", dat);
       } else {
         dat = ((datamax-datamin)*vresbuffered_uV)/1000;
         if(dat>1000)
-          sprintf(str, "P-P=%ld.%02ldV ", dat/1000, (dat%1000)/10);
+          sprintf(str, "P-P=%ld.%02ldV ", dat/1000, (dat%1000)/100);
         else
           sprintf(str, "P-P=%ldmV ", dat);
       }
@@ -376,10 +376,10 @@ void plotInformation()
         
       tft.print(str);
 
-      if( datadutycyclex1000 > 1000)
+      if( datadutycyclex1000 >= 1000)
         sprintf(str, "d%%=???");
       else
-        sprintf(str, "d%%=%u.%u", datadutycyclex1000/10, datadutycyclex1000%10);
+        sprintf(str, "d%%=%u", datadutycyclex1000/10);
       tft.print(str);
         /*
       if(datafreq_Hzx10 < 1000 )
@@ -532,7 +532,7 @@ void scopeSettings()
       tft.print("P-P");
   
     tft.setCursor(5,5+SCREENHEIGHT/3);
-    tft.print(F("Auto Scale"));
+    tft.print(F("Auto Set"));
 
     tft.setCursor(5+SCREENWIDTH/2,5+SCREENHEIGHT/3);
     tft.print(F("Save to SD"));
@@ -543,7 +543,11 @@ void scopeSettings()
     tft.print(F(" kS/s"));
 
     tft.setCursor(5 + SCREENWIDTH/2, 5 + 2*SCREENHEIGHT/3);
-    tft.print("FFT");
+    tft.println("Power");
+    tft.setCursor(5 + SCREENWIDTH/2, 19 + 2*SCREENHEIGHT/3);
+    tft.print("Spectrum");
+    tft.setCursor(5 + SCREENWIDTH/2, 34 + 2*SCREENHEIGHT/3);
+    tft.setTextSize(1); tft.print(F("(do auto set first)"));
 
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
@@ -589,24 +593,26 @@ int powerToMilliDB(int num)
   return 20000*log10(sqrt((float)num));
 }*/
 
-void fftsubmode()
+void fftsubmode(bool justdraw)
 {
   tft.fillScreen(COLOR_BLACK);
   
-  // Resample to 256 points
-  #define FFTSIZE 256
+  // Resample to 128 points
+  #define FFTSIZE 128
   uint8_t fundindex = 2; // third index, assuming two complete cycles appeared in the on-screen interval
-  int8_t data[FFTSIZE], im[FFTSIZE];
+  double data[FFTSIZE], im[FFTSIZE];
+  arduinoFFT FFT = arduinoFFT();
+  
   int d = rightmostindex - scrollindex;
   float fsam = 1000000000.0/((float)d*dtbuffered_ns/FFTSIZE);
   int n;
-  long int mysum = 0;
+  //long int mysum = 0;
   bool returntomain = false;
   //Serial.println(F("Downsample:"));
   //Serial.print(F("d = "));Serial.println(d);
   for(int i=0;i<FFTSIZE;i++)
   {
-       mysum = 0;
+       //mysum = 0;
        n=0;
        /*
        for(int j = 0; j<d/FFTSIZE; j++)
@@ -615,57 +621,102 @@ void fftsubmode()
          n++;
        }
        data[i] = (mysum/n - 128); // Might be better to subtract mean rather than 128 */
-       data[i] = (long int)(ADCBuffer[(scrollindex+map(i,0,FFTSIZE-1,0,d))%ADCBUFFERSIZE]);
+       data[i] = (float)(ADCBuffer[(ADCCounter+scrollindex+map(i,0,FFTSIZE-1,0,d))%ADCBUFFERSIZE]);
        im[i] = 0;
   }
-  fix_fft(data, im, 8, 0);
-  
+  FFT.DCRemoval(data, FFTSIZE);
+  Serial.print("data=[");
+  for(int i=0;i<FFTSIZE;i++)
+  {
+    Serial.print(data[i]);
+    if(i!=FFTSIZE-1)
+      Serial.print(',');
+  }
+  Serial.println("];");
+  //FFT.Windowing(data, FFTSIZE, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+  FFT.Compute(data, im, FFTSIZE, FFT_FORWARD);
+  //FFT.ComplexToMagnitude(data, im, FFTSIZE);
+  //Serial.print("scale=");
+  //Serial.println(fix_fft(data, im, 8, 0));
+
+  /*
   int* pwr = (int*)(&(data[0]));
-
+  Serial.print("pwr=[");
   for(int i=0; i<FFTSIZE/2; i++)
-    pwr[(i+FFTSIZE/4)%(FFTSIZE/2)] = (int)data[i]*data[i] + (int)im[i]*im[i];
-
+  {
+    pwr[(i+FFTSIZE/4)%(FFTSIZE/2)] = (int)data[i]*data[i] + (int)im[i]*im[i]>>1;
+    Serial.print(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)]); Serial.print(',');
+  }
+  Serial.println(']');*/
+  double maxpwr = 0;
+  Serial.print("pwr=[");
+  for(int i=0;i<FFTSIZE/2;i++)
+  {
+    data[i] = data[i]*data[i]+im[i]*im[i];
+    if(maxpwr < data[i])
+      maxpwr = data[i];
+    Serial.print(data[i]);
+    if(i!=FFTSIZE/2-1)
+      Serial.print(',');
+  }
+  Serial.println("];");
+  maxpwr = maxpwr;
+  Serial.print("maxpwr = "); Serial.println(maxpwr);
+  for(int i=0;i<FFTSIZE/2;i++)
+    data[i] = 1024*data[i]/maxpwr; // Trying to rescale it so it makes for prettier integers again
   for(int i=1; i<FFTSIZE/2; i++)
     {
       // TODO: Would it be better to plot sqrt(pwr), possibly converted to dB?
-      tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - 25 - map(pwr[(i-1+FFTSIZE/4)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT-25),map(i,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT -25 - map(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT-25),COLOR_GREENYELLOW);
-      //tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - 25 - map(powerToMilliDB(pwr[(i-1+FFTSIZE/4)%(FFTSIZE/2)]),-60000,60000,0,SCREENHEIGHT-25),map(i,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT -25 - map(powerToMilliDB(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)]),-60000,60000,0,SCREENHEIGHT-25),COLOR_GREENYELLOW);
+      //tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - 50 - map(pwr[(i-1+FFTSIZE/4)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT-50),map(i,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - 50 - map(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT-50),COLOR_GREENYELLOW);
+      tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - 50 - map(data[(i-1)],0,1024,0,SCREENHEIGHT-50),map(i,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - 50 - map(data[(i)%(FFTSIZE/2)],0,1024,0,SCREENHEIGHT-50),COLOR_GREENYELLOW);
+      //tft.drawLine(map(i-1,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT - 50 - map(powerToMilliDB(pwr[(i-1+FFTSIZE/4)%(FFTSIZE/2)]),-60000,60000,0,SCREENHEIGHT-50),map(i,0,FFTSIZE/2,0,SCREENWIDTH),SCREENHEIGHT -50 - map(powerToMilliDB(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)]),-60000,60000,0,SCREENHEIGHT-50),COLOR_GREENYELLOW);
     }
   
   //Serial.print("mysum = "); Serial.print(mysum); Serial.print(", principal = ");Serial.println(pwr[(2+FFTSIZE/4)%(FFTSIZE/2)] );
-  int thdx10;
-  pixelsx = map(fundindex,0,FFTSIZE-1,0,SCREENWIDTH);
-  tft.readGRAM( pixelsx, 0, pixels, 1, SCREENHEIGHT-25);
+  //int thdx10;
+  double thd;
+  pixelsx = map(fundindex,0,FFTSIZE/2,0,SCREENWIDTH);
+  tft.readGRAM( pixelsx, 0, pixels, 1, SCREENHEIGHT-50);
+  double pwrsum;
   while(!returntomain)
   {
-    mysum = 0;
+    pwrsum = 0; //mysum = 0;
     for(int i=fundindex+1; i<FFTSIZE/2; i++)
     {
-      if( 0 == (i%fundindex) ) // harmonics only
-        mysum += pwr[(i+FFTSIZE/4)%(FFTSIZE/2)];
+      //if( 0 == (i%fundindex) ) // harmonics only
+        //mysum += pwr[(i+FFTSIZE/4)%(FFTSIZE/2)];
       //Serial.println(pwr[(i+FFTSIZE/4)%(FFTSIZE/2)]);
+      pwrsum += data[i];
     }
+    Serial.print("pwrsum="); Serial.println(pwrsum);
 
-    tft.setAddrWindow( pixelsx, 0, pixelsx, SCREENHEIGHT-25 );
-    tft.pushColors(pixels, SCREENHEIGHT-25, true);
+    tft.setAddrWindow( pixelsx, 0, pixelsx, SCREENHEIGHT-50 );
+    tft.pushColors(pixels, SCREENHEIGHT-50, true);
     tft.setAddrWindow(0, 0, tft.width() - 1, tft.height() - 1);
-    pixelsx = map(fundindex,0,FFTSIZE-1,0,SCREENWIDTH);
-    tft.readGRAM( pixelsx, 0, pixels, 1, SCREENHEIGHT-25);
-    tft.drawFastVLine( pixelsx,0,SCREENHEIGHT-25,COLOR_RED);
+    pixelsx = map(fundindex,0,FFTSIZE/2,0,SCREENWIDTH);
+    tft.readGRAM( pixelsx, 0, pixels, 1, SCREENHEIGHT-50);
+    if(!justdraw)
+      tft.drawFastVLine( pixelsx,0,SCREENHEIGHT-50,COLOR_RED);
 
-    thdx10 = (int)sqrt( 1000000*mysum / pwr[(fundindex+FFTSIZE/4)%(FFTSIZE/2)] );
-    tft.fillRect(0,SCREENHEIGHT-24,SCREENWIDTH,SCREENHEIGHT,COLOR_BLACK);
-    tft.setCursor(0,SCREENHEIGHT-23);
+//    thdx10 = (int)sqrt( 1000000*mysum / pwr[(fundindex+FFTSIZE/4)%(FFTSIZE/2)] );
+    thd = sqrt( pwrsum / data[fundindex]);
+    tft.fillRect(0,SCREENHEIGHT-49,SCREENWIDTH,SCREENHEIGHT,COLOR_BLACK);
+    tft.setCursor(0,SCREENHEIGHT-35);
     tft.setTextSize(2);
     tft.setTextColor(COLOR_WHITE);
     tft.print(F("FUND ")); tft.print(fundindex*fsam/FFTSIZE); //tft.print('.'); tft.print((fundindex*fsamx10)%10);
-    tft.print(F("Hz:THD+N=")); tft.print(thdx10/10); tft.print('.'); tft.print(thdx10%10); tft.print('%');
+    tft.print(F("Hz:THD+N=")); tft.print((100*thd)); tft.print('%');//tft.print(thdx10/10); tft.print('.'); tft.print(thdx10%10); tft.print('%');
+    tft.setTextSize(1);
+    if(justdraw)
+      return;
+    tft.setCursor(150,SCREENHEIGHT-10);
+    tft.print(F("[EXIT]"));
     returntomain = false;
     
     tp.z = 0;
     while(MINPRESSURE>tp.z || MAXPRESSURE<tp.z)
       readResistiveTouch();
-    if( tp.y < SCREENHEIGHT-25 ) // *** TOP PART ***
+    if( tp.y < SCREENHEIGHT-50 ) // *** TOP PART ***
     {
       if( tp.x < SCREENWIDTH/2 ) // Left side
       {
@@ -954,6 +1005,8 @@ void scopeMode()
             delay(300);
             break;
           }
+          if( SINGLE != triggermode )
+            delay(1000);
         } while (SINGLE != triggermode);
         plotHorizScale();
         plotInformation();
@@ -1578,6 +1631,7 @@ void saveBufferToSd()
     {
       myFile.println(F("% Ranocchio scopemeter output file"));
       myFile.println("");
+      myFile.print("% ");
       myFile.println(str); // Notes
       myFile.println("");
       myFile.print(F("timestep_ns = ")); myFile.print(dtbuffered_ns); myFile.println(";");
@@ -1627,12 +1681,18 @@ void saveBufferToSd()
     tft.print(str);
   
     saveScreenshotToSd(filename);
+
+    // Let's save the fft also while we're at it
+    fftsubmode(true);
+    filename[numchars+3]='f';
+    saveScreenshotToSd(filename);
   }
 
 }
 
 // Derived from http://www.technoblogy.com/show?398X
 // Licensing terms for this function are unclear. GPL may not apply. Contact original poster for more information.
+// I wonder if it would be faster to read multiple pixels at a time from the display controller
 void saveScreenshotToSd(char* filename)
 {
   // Initialize SD card if needed
