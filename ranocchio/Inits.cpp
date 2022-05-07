@@ -237,11 +237,17 @@ void initADC(void)
     cbi(ADCSRA,ADPS0);
     dtbuffered_ns = 13000;
     break;
-  default: // case 32
+  case 32:
     sbi(ADCSRA,ADPS2);
     cbi(ADCSRA,ADPS1);
     sbi(ADCSRA,ADPS0);
     dtbuffered_ns = 26000;
+    break;
+  default: // case 64
+    sbi(ADCSRA,ADPS2);
+    sbi(ADCSRA,ADPS1);
+    cbi(ADCSRA,ADPS0);
+    dtbuffered_ns = 52000;
     break;
  }
   //Serial.print("dtbuffered_ns = "); Serial.print(dtbuffered_ns); Serial.print(' '); Serial.print(ADCSRA); Serial.print(" ADCprescaler "); Serial.println(MySettings.ADCprescaler);

@@ -85,6 +85,12 @@ extern bool SDready;
 extern volatile uint32_t dtbuffered_ns;
 extern volatile uint32_t vresbuffered_uV;
 
+#define DISP_AVG 0
+#define DISP_PP 1
+#define DISP_RMSDC 2
+#define DISP_RMSAC 3
+#define DISP_NUMOPTIONS 4
+
 #define SIMULATION
 
 #define LCD_CS A3 // Chip Select goes to Analog 3
@@ -165,7 +171,7 @@ typedef struct {
   uint32_t uVperdiv;
   uint32_t usperdiv;
   uint8_t ADCprescaler;
-  bool displayrms;
+  uint8_t displayrms;
   uint32_t currentrange_mV;
 } RanocchioSettings;
 
@@ -222,7 +228,8 @@ void exportData();
 // https://www.youtube.com/watch?v=exiWoeLm4Wc
 extern uint8_t datamin;
 extern uint8_t datamax;
-extern uint32_t datarms;
+extern uint8_t datamean;
+extern uint32_t datarmsac, datarmsdc;
 int sum3(int i);
 void analyzeData(bool adjustwindow=false);
 

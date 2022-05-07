@@ -42,8 +42,21 @@ int touchkeyinput(char* s, int numchars, char* instructions, char* toggleoptions
     for(int c=0;c<10;c++)
     {
       tft.setCursor(KEYSIZE/3 + c*KEYSIZE, KEYBOARDY + KEYSIZE/3 + r*KEYSIZE);
-      tft.print(keyboardkeys[r][c]);
+      switch(keyboardkeys[r][c])
+      {
+        case '!': // placeholder for carriage return
+          break;
+        default:
+          tft.print(keyboardkeys[r][c]);
+          break;
+      }
     }
+    tft.setCursor(KEYSIZE/2 + 3*KEYSIZE, KEYBOARDY + KEYSIZE/3 + 3*KEYSIZE + 3);
+    tft.setTextSize(1);
+    tft.print("SPACE");
+    tft.setCursor(KEYSIZE/3 + 9*KEYSIZE - 2, KEYBOARDY + KEYSIZE/3 + 2*KEYSIZE + 3);
+    tft.print("ENT");
+    tft.setTextSize(2);
   }
 
   if( (NULL != toggleoptions) && (0<numtoggleoptions) )

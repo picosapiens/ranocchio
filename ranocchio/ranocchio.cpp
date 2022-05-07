@@ -43,7 +43,8 @@ uint16_t triplesum;
 
 uint8_t datamin;
 uint8_t datamax;
-uint32_t datarms;
+uint8_t datamean;
+uint32_t datarmsdc, datarmsac;
 uint16_t datadutycyclex1000;
 long int dataperiod_us;
 long int datafreq_Hzx10;
@@ -339,7 +340,7 @@ void plotInformation()
 
   tft.setTextSize(2);
   
-  long int dat;
+  float dat;
 
   char str[45];
   
@@ -351,22 +352,33 @@ void plotInformation()
       analyzeData();
       tft.setTextColor(COLOR_WHITE);
       tft.setCursor(0,PLOTTERY+PLOTTERH+16);
-      
-      if(MySettings.displayrms)
+
+      switch(MySettings.displayrms)
       {
-        dat = (datarms*vresbuffered_uV)/1000;
-        if(dat>1000)
-          sprintf(str, "RMS=%ld.%02ldV ", dat/1000, (dat%1000)/100);
-        else
-          sprintf(str, "RMS=%ldmV ", dat);
-      } else {
-        dat = ((datamax-datamin)*vresbuffered_uV)/1000;
-        if(dat>1000)
-          sprintf(str, "P-P=%ld.%02ldV ", dat/1000, (dat%1000)/100);
-        else
-          sprintf(str, "P-P=%ldmV ", dat);
+        case DISP_AVG:
+          tft.print("AVG=");
+          dat = datamean;
+          dat = ((dat-128.0)*vresbuffered_uV)/1000000;
+          break;
+        case DISP_PP:
+          tft.print("P-P=");
+          dat = ((datamax-datamin)*vresbuffered_uV)/1000000;
+          break;
+        case DISP_RMSDC:
+          tft.print("RMS=");
+          dat = (datarmsdc*vresbuffered_uV)/1000000;
+          /*if(fabs(dat)>1.0)
+            sprintf(str, "RMS=%.1fV ", dat);
+          else
+            sprintf(str, "RMS=%fmV ", dat*1000);*/
+          break;
+        case DISP_RMSAC:
+          tft.print("AC=");
+          dat = (datarmsac*vresbuffered_uV)/1000000;
+          break;
       }
-      tft.print(str);
+      tft.print(dat); tft.print(' ');
+      //tft.print(str);
       if(datafreq_Hzx10 < 0)
         sprintf(str, "f=??? ");
       else if(datafreq_Hzx10 < 1000 )
@@ -394,6 +406,14 @@ void plotInformation()
       tft.setCursor(0,PLOTTERY+PLOTTERH+16);
       sprintf(str, "%ldus, %ldmV", cursorpos*dtbuffered_ns/1000, ((long int)(ADCBuffer[(ADCCounter+cursorpos)%ADCBUFFERSIZE])-128)*(long int)vresbuffered_uV/1000);
       tft.print(str);
+      tft.setTextColor(COLOR_WHITE);
+      break;
+    case TRIGGER:
+      tft.setCursor(50,PLOTTERY+PLOTTERH+16);
+      tft.setTextColor(COLOR_BLUE);
+      tft.print( ((float)triggerlevel - 128)*(MySettings.currentrange_mV/128)/1000 ); // not using vresbuffered_uV in case the range setting is different from that used during the last buffer collection
+      tft.print('V');
+      tft.setTextColor(COLOR_WHITE);
       break;
   }
 }
@@ -526,10 +546,21 @@ void scopeSettings()
     tft.setCursor(5+SCREENWIDTH/2,5);
     tft.print("V display: ");
     tft.setCursor(5+SCREENWIDTH/2,20);
-    if(MySettings.displayrms)
-      tft.print("RMS");
-    else
-      tft.print("P-P");
+    switch(MySettings.displayrms)
+    {
+      case DISP_AVG:
+        tft.print("Mean");
+        break;
+      case DISP_PP:
+        tft.print("Pk-Pk");
+        break;
+      case DISP_RMSDC:
+        tft.print("RMS DC");
+        break;
+      case DISP_RMSAC:
+        tft.print("RMS AC");
+        break;
+    }
   
     tft.setCursor(5,5+SCREENHEIGHT/3);
     tft.print(F("Auto Set"));
@@ -562,20 +593,20 @@ void scopeSettings()
       } else if (tp.y < 2*SCREENHEIGHT/3) { // Middle
         // Auto scale
         scrollindex = 0;
-        rightmostindex = waitDuration;
+        rightmostindex = ADCBUFFERSIZE;
         analyzeData(true);
         returntomain = true;
       } else { // Bottom
         // Adjust sample rate
         MySettings.ADCprescaler = 2*MySettings.ADCprescaler;
-        if(32 < MySettings.ADCprescaler)
+        if(64 < MySettings.ADCprescaler)
           MySettings.ADCprescaler = 4;
       }
     } else { //                   *** Right column ***
       if( tp.y < SCREENHEIGHT/3 ) // Top
       {
         // Toggle between RMS and P-P voltage display in the info bar
-        MySettings.displayrms = !(MySettings.displayrms);
+        MySettings.displayrms = (MySettings.displayrms+1)%DISP_NUMOPTIONS;
       } else if ( tp.y < 2*SCREENHEIGHT/3) { // Middle
         // Save data (or screenshot) to SD Card
         saveBufferToSd(); // Gives options for data file, bmp screenshot, or both
@@ -985,10 +1016,11 @@ void scopeMode()
         tft.print(F("Running..."));
         tft.setCursor(0,SCREENHEIGHT-10); tft.setTextSize(1);
         if( SINGLE == triggermode )
+        {
           tft.print(F("[Change range to abort]"));
-        else
+        } else {
           tft.print(F("[Long press to stop; Change range to abort]"));
-        keeprunning = true;
+        }
         do
         {
           runScope();
@@ -1005,9 +1037,11 @@ void scopeMode()
             delay(300);
             break;
           }
+          if(!keeprunning)
+            break;
           if( SINGLE != triggermode )
             delay(1000);
-        } while (SINGLE != triggermode);
+        } while (NORMAL == triggermode);
         plotHorizScale();
         plotInformation();
         }
@@ -1055,11 +1089,21 @@ void scopeMode()
               break;
             case TRIGGER:
               restoreplotrow();
-              if(255>triggerlevel)
-                triggerlevel++;
-              analogWrite(44,triggerlevel);
+              switch(leftfunc)
+              {
+                case FINEADJUST:
+                  if(255>triggerlevel)
+                    triggerlevel++;
+                  break;
+                case COARSEADJUST:
+                  if(250>triggerlevel)
+                    triggerlevel = triggerlevel+5;
+                  break;
+              }
+              //analogWrite(44,triggerlevel);
               storeplotrow();
               tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERW,COLOR_BLUE);
+              plotInformation();
               break;
           }
         } else if ( (PLOTTERY + PLOTTERH/2 < tp.y) && (PLOTTERY + PLOTTERH > tp.y) ) { // Bottom half
@@ -1102,11 +1146,21 @@ void scopeMode()
               break;
             case TRIGGER:
               restoreplotrow();
-              if(0<triggerlevel)
-                triggerlevel--;
-              analogWrite(44,triggerlevel);
+              switch(leftfunc)
+              {
+                case FINEADJUST:
+                  if(0<triggerlevel)
+                    triggerlevel--;
+                  break;
+                case COARSEADJUST:
+                  if(5<triggerlevel)
+                    triggerlevel = triggerlevel - 5;
+                  break;
+              }
+              //analogWrite(44,triggerlevel);
               storeplotrow();
               tft.drawFastHLine(PLOTTERX,PLOTTERY+PLOTTERH-counts_to_vpixels(verticalmidpoint,triggerlevel),PLOTTERW,COLOR_BLUE);
+              plotInformation();
               break;
           }
         } else if ( PLOTTERY+PLOTTERH < tp.y) { // Very bottom of screen
@@ -1678,14 +1732,19 @@ void saveBufferToSd()
     tft.setTextColor(COLOR_WHITE);
     tft.setTextSize(2);
     tft.setCursor(2,SCREENHEIGHT-24);
-    tft.print(str);
+    if( '\0' != str[0] )
+      tft.print(str);
+    else
+      plotInformation();
   
     saveScreenshotToSd(filename);
 
-    // Let's save the fft also while we're at it
+    /*
+    // This saves the FFT plot also, recycling the file name but with a bad extension
     fftsubmode(true);
     filename[numchars+3]='f';
     saveScreenshotToSd(filename);
+    */
   }
 
 }
@@ -1790,16 +1849,25 @@ void analyzeData(bool adjustwindow) // Analyze the portion of the data between s
   uint32_t totalhightime=0;
   int num;
   bool searchpositive=true;
-  datarms = sq((int16_t)ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE]-128);
+  datarmsdc = sq((int16_t)ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE]-128);
+  datarmsac = ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE];
   for(int i = scrollindex+1; i<=rightmostindex-1; i++)
   {
-    datarms += sq((int16_t)ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]-128);
+    datarmsdc += sq((int16_t)ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]-128);
+    datarmsac += ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE];
     if( ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE] > datamax )
       datamax = ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE];
     if( ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE] < datamin )
       datamin = ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE];
   }
-  datarms = sqrt(datarms/(rightmostindex-scrollindex));
+  datarmsdc = sqrt(datarmsdc/(rightmostindex-scrollindex+1));
+  datamean = datarmsac/(rightmostindex-scrollindex+1);
+  datarmsac = sq((int16_t)ADCBuffer[(ADCCounter+scrollindex)%ADCBUFFERSIZE]-datamean);
+  for(int i = scrollindex+1; i<=rightmostindex-1; i++)
+  {
+    datarmsac += sq((int16_t)ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]-datamean);
+  }
+  datarmsac = sqrt(datarmsac/(rightmostindex-scrollindex+1));
   swingline = (datamax+datamin)/2;
 
   // Find positive crossings of the mean signal
@@ -1839,11 +1907,17 @@ void analyzeData(bool adjustwindow) // Analyze the portion of the data between s
   #warning frequency count is not working
   datadutycyclex1000 = 1000*(10*totalhightime-(searchpositive?lastncrossing*10-lastpcrossingx10:0))/(lastpcrossingx10-firstpcrossingx10);
 
- if(adjustwindow && (2<foundpcrossings))
+ if(adjustwindow)
  {
-    scrollindex = firstpcrossingx10/10;
-    MySettings.usperdiv = (dtbuffered_ns*(thirdpcrossing-scrollindex)+1)/6000;
-    
+    //Serial.print("foundpcrossings = "); Serial.print(foundpcrossings); Serial.print(", thirdpcrossing = "); Serial.println(thirdpcrossing);
+    if(2<foundpcrossings)
+    {
+      scrollindex = firstpcrossingx10/10;
+      MySettings.usperdiv = (dtbuffered_ns*(thirdpcrossing-scrollindex)+1)/6000;
+    } else {
+      scrollindex = 0;
+      MySettings.usperdiv = (dtbuffered_ns*(ADCBUFFERSIZE-scrollindex)+1)/6000;
+    }
     verticalmidpoint = ((int)swingline-128)*vresbuffered_uV;
     MySettings.uVperdiv = (datamax-datamin+2)*vresbuffered_uV/4;
  }

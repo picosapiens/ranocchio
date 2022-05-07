@@ -110,7 +110,7 @@ void setup() {
  //memset( (void *)commandBuffer, 0, sizeof(commandBuffer) );
   ADCCounter = 0;
   wait = false;
-  waitDuration = ADCBUFFERSIZE-200; // Subtract a small amount of pretrigger time if desired
+  waitDuration = ADCBUFFERSIZE-400; // Less than ADCBUFFERSIZE to save some pretrigger data too
   stopIndex = -1;
   freeze = false;
 
@@ -122,7 +122,7 @@ void setup() {
   sei();
   
   //initPins();
-  //initADC();
+  //initADC(); deinitADC(); // so the initial scaling is correct
   /*initAnalogComparator();
 
   Serial.println("Girino ready");*/
