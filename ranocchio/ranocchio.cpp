@@ -472,6 +472,7 @@ void restoreplotrow()
   tft.setAddrWindow(PLOTTERX, 0, tft.width() - 1, tft.height() - 1);
 }
 
+// This version blanks the whole plot before drawing
 void plotanalogdata()
 {
   // Plot the grid
@@ -509,6 +510,69 @@ void plotanalogdata()
     x0 = x1;
   }
   //Serial.print("Done drawing.\n");
+}
+
+void blankplotcol(int col)
+{
+  if( 0 == (col)%XDIVPIXELS )
+  {
+    tft.drawFastVLine(col+PLOTTERX,PLOTTERY,PLOTTERH,COLOR_DARKERGREY);
+  } else {
+    tft.drawFastVLine(col+PLOTTERX,PLOTTERY,PLOTTERH,COLOR_BLACK);
+    for( int i = 0; i<=PLOTTERH; i=i+YDIVPIXELS) tft.drawFastHLine(col+PLOTTERX,i+PLOTTERY,1,COLOR_DARKERGREY);
+  }
+}
+
+// This version sweeps through the plot area
+void plotanalogdata2()
+{
+  blankplotcol(0);
+  //bool finished = false;
+  int idx0 = scrollindex;
+  int idx1 = scrollindex;
+  int y0 = PLOTTERY + PLOTTERH - counts_to_vpixels(verticalmidpoint, ADCBuffer[(ADCCounter+idx0)%ADCBUFFERSIZE]);
+  int y1;
+  int x0 = PLOTTERX;
+  int x1;
+  int h;
+  for( int col = 0; col<PLOTTERW; col++)
+  {
+    // Find the first index in the next column
+    for(idx1=idx0; idx1<ADCBUFFERSIZE; idx1++)
+    {
+      h = index_to_hpixels( scrollindex, idx1 );
+      if( h > col )
+        break;
+    }
+    rightmostindex = idx1;
+    for (int i = col+1; i<=h+1; i++)
+      blankplotcol(i);
+    for (int i = idx0; i<=idx1; i++)
+    {
+      x1 = PLOTTERX + index_to_hpixels( scrollindex, i );
+      y1 = PLOTTERY + PLOTTERH - counts_to_vpixels(verticalmidpoint, ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]);
+      /*if( x1 > PLOTTERX + PLOTTERW )
+      {
+        finished = true;
+      }*/
+      if( y1 > PLOTTERY+PLOTTERH || y1 < PLOTTERY )
+      {
+        y1 = constrain(y1,PLOTTERY,PLOTTERY+PLOTTERH);
+        tft.drawLine(x0, y0, x1, y1, COLOR_DARKERGREEN); 
+      } else {
+        //Serial.println(ADCBuffer[(ADCCounter+i)%ADCBUFFERSIZE]);
+        tft.drawLine(x0, y0, x1, y1, COLOR_GREENYELLOW);  
+      }
+      y0 = y1;
+      x0 = x1;
+      idx0 = idx1;
+      //delay(1);
+      //warning unnecessary sleep
+    }
+    /*if(finished)
+      break;*/
+  }
+  
 }
 
 int index_to_hpixels( int start, int i )
@@ -1024,7 +1088,7 @@ void scopeMode()
         do
         {
           runScope();
-          plotanalogdata();
+          plotanalogdata2();
       
           tp.z = 0;
           readResistiveTouch();
@@ -1039,8 +1103,8 @@ void scopeMode()
           }
           if(!keeprunning)
             break;
-          if( SINGLE != triggermode )
-            delay(1000);
+          //if( SINGLE != triggermode )
+          //  delay(1000);
         } while (NORMAL == triggermode);
         plotHorizScale();
         plotInformation();
@@ -1236,8 +1300,6 @@ void scopeMode()
 
 void runScope()
 {
-  #warning I think I may need to do away with ISR(ADC_vect) and just calibrate a loop here so we do not miss anything
-
   memset( (void *)ADCBuffer, 0, sizeof(ADCBuffer) ); // clear buffer
   vresbuffered_uV = MySettings.currentrange_mV*1000/128;
   initADC();
