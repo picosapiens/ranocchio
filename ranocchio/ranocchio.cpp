@@ -545,7 +545,14 @@ void plotanalogdata2()
       if( h > col )
         break;
     }
-    rightmostindex = idx1;
+    if( idx1 == idx0 )
+    {
+      for( int i = col+1; i<PLOTTERW; i++)
+        blankplotcol(i);
+      break;
+    } else {
+      rightmostindex = idx1;
+    }
     for (int i = col+1; i<=h; i++)
       blankplotcol(i);
     col = h;
@@ -661,6 +668,17 @@ void scopeSettings()
         scrollindex = 0;
         rightmostindex = ADCBUFFERSIZE;
         analyzeData(true);
+        if( 100 >= MySettings.usperdiv ) {
+          MySettings.ADCprescaler = 4;
+        } else if ( 600 >= MySettings.usperdiv ) {
+          MySettings.ADCprescaler = 8;
+        } else if ( 3000 >= MySettings.usperdiv ) {
+          MySettings.ADCprescaler = 16;
+        } else if ( 6000 >= MySettings.usperdiv ) {
+          MySettings.ADCprescaler = 32;
+        } else {
+          MySettings.ADCprescaler = 64;
+        }
         returntomain = true;
       } else { // Bottom
         // Adjust sample rate
