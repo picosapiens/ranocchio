@@ -535,7 +535,8 @@ void plotanalogdata2()
   int x0 = PLOTTERX;
   int x1;
   int h;
-  for( int col = 0; col<PLOTTERW; col++)
+  int col=0;
+  while( col<PLOTTERW )
   {
     // Find the first index in the next column
     for(idx1=idx0; idx1<ADCBUFFERSIZE; idx1++)
@@ -545,8 +546,9 @@ void plotanalogdata2()
         break;
     }
     rightmostindex = idx1;
-    for (int i = col+1; i<=h+1; i++)
+    for (int i = col+1; i<=h; i++)
       blankplotcol(i);
+    col = h;
     for (int i = idx0; i<=idx1; i++)
     {
       x1 = PLOTTERX + index_to_hpixels( scrollindex, i );
@@ -566,7 +568,7 @@ void plotanalogdata2()
       y0 = y1;
       x0 = x1;
       idx0 = idx1;
-      //delay(1);
+      //delay(1); // can be useful to uncomment this when debugging drawing issues
       //warning unnecessary sleep
     }
     /*if(finished)

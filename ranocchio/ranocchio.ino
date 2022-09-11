@@ -135,7 +135,7 @@ void setup() {
   pinMode(46,OUTPUT);
   analogWrite(46,128); // For the negative charge pump
   pinMode(45,OUTPUT);
-  analogWrite(45,128); // For the positive charge pump
+  analogWrite(45,128); // For the positive charge pump, if used
 
   // Digital interrupts - https://www.instructables.com/External-Interrupt-in-arduino/
   // Call the rangeToggled function if either of the pins changes
@@ -158,7 +158,7 @@ void setup() {
   verticalmidpoint = 0;
   rightfunc = SCALE;
   leftfunc = COARSEADJUST;
-  triggertype = RISINGEDGE;
+  triggertype = NOTRIGGER;
   triggermode = SINGLE;
   //pinMode(18,INPUT);
   SDready = false;
